@@ -60,8 +60,8 @@ On models: Claude Haiku is the default for nearly everything, since it's the che
 | # | Lesson | What you build | Core ADK concept |
 |---|--------|----------------|-------------------|
 | 1 | [Setting Up Your ADK Environment](blogs/Lesson-01-Environment-Setup.md) | `uv` project scaffold, ADK install, Claude and Gemini Flash keys wired up, VS Code configured | Project structure, environment verification |
-| 2 | Your First Agent | A minimal greeting agent (the last non-BFSI example in the series) | `LlmAgent`, `adk run`, `adk web` |
-| 3 | Function Tools | Loan EMI and affordability calculator agent | `@tool`-style function tools, `ToolContext` |
+| 2 | [Your First Agent](blogs/Lesson-02-Your-First-Agent.md) | A minimal greeting agent (the last non-BFSI example in the series) | `LlmAgent`, `adk run`, `adk web` |
+| 3 | [Function Tools](blogs/Lesson-03-Function-Tools.md) | Loan EMI and affordability calculator agent | `@tool`-style function tools, `ToolContext` |
 | 4 | Built-in Tools & Grounding | Market briefing agent pulling live prices via `yfinance` plus Google Search grounding | Built-in tools, tool mixing, the Gemini-only grounding limitation |
 | 5 | Structured Output | Credit risk scoring agent that always returns a validated JSON verdict | `output_schema`, Pydantic, `output_key` |
 | 6 | Sessions & State | Multi-turn KYC (Know Your Customer) onboarding agent that remembers what's been collected | `Session`, `SessionService`, `state` |
