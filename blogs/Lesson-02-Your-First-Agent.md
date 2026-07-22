@@ -69,6 +69,18 @@ from . import agent
 
 That's the whole agent. Three real pieces: a model, an instruction, and a name. Everything else, the conversation loop, calling the LLM API, managing the exchange, is ADK's job, not yours.
 
+## What each parameter in `Agent(...)` actually does
+
+Before we move on, it's worth knowing what each of these four arguments controls, since you'll use all of them in every agent you build for the rest of this series.
+
+- **`name`** — a unique identifier for this agent, and it's mandatory. ADK enforces two rules on it: it must be a valid Python identifier (letters, digits, underscores, no spaces or hyphens, can't start with a digit), and it can't be the literal string `"user"`, since ADK reserves that for the end user's own input. Once you start building multi-agent systems from Lesson 8 onward, this name is also how one agent refers to another, so it's worth naming agents descriptively from the start, the way we did with `bfsi_support_desk_agent`.
+
+- **`model`** — which LLM answers on this agent's behalf, either a plain string (for models ADK resolves natively, like Gemini) or a model object you construct yourself (as we just did for Claude, with `AnthropicLlm(...)`). This is the one parameter you'll see change the most across the series as we swap between Haiku, Sonnet, and Gemini Flash depending on the lesson.
+
+- **`instruction`** — the system prompt: your agent's standing directions for how to behave, what tone to use, and what it should and shouldn't do. This is the single biggest lever you have over an agent's behavior, and it's worth spending real time on. Later in the series, once we cover sessions and state (Lesson 6), you'll see this field can also contain placeholders like `{customer_name}` that get filled in from live conversation data, rather than being fixed text like it is here.
+
+- **`description`** — a short, one-line summary of what this agent does, separate from `instruction`. It doesn't affect how the agent behaves at all. It matters once an agent has other agents working under it: the parent uses each sub-agent's `description` to decide which one to hand a task to. In this lesson, with a single standalone agent, it's doing nothing functionally yet, but it's good practice to write it accurately from the start, since it becomes load-bearing the moment this agent joins a larger system in later lessons.
+
 ## A caveat worth knowing: Claude and Gemini aren't resolved the same way
 
 Notice that Gemini gets passed in as a plain string (`"gemini-flash-latest"`), but Claude gets wrapped in an `AnthropicLlm(...)` object instead of a string like `"claude-haiku-4-5-20251001"`. This isn't a style choice, it's necessary, and it's worth understanding so it doesn't trip you up later.
@@ -77,19 +89,40 @@ When you give ADK a plain model name string, it looks the name up against a set 
 
 ## Step 3: Run it with `adk run`
 
-`adk run` gives you a command-line chat loop, the fastest way to test an agent without opening a browser. From your project root:
+`adk run` gives you a command-line chat loop, the fastest way to test an agent without opening a browser. From your project root (i.e. from `adk2_tutorial` folder) run the following command:
 
 ```bash
 uv run adk run agents/lesson02_first_agent
 ```
 
-You'll land on a prompt waiting for your input. Type a question like:
+Notice that we are passing a folder name of the folder containing our `agent.py` file to the `adk run` command - not a Python module name!
+
+If all runs correctly, you'll see a bunch of logging information printed on your console, which you can safely ignore, followed by this: 
+
+```bash
+Running agent bfsi_support_desk_agent, type exit to exit.
+[user]: 
+```
+
+The `bsfi_support_desk_agent` comes from the value of the `name` parameter we gave our Agent. Type a question like:
 
 ```
 What does APR mean?
 ```
 
-and press Enter. Within a few seconds you should see a short, plain-language explanation come back, written the way you'd expect a bank's support desk to explain it to a new customer. Try a couple more terms if you like: EMI, KYC, overdraft. Type `exit` or press `Ctrl+C` when you're done.
+and press Enter. Within a few seconds you should see a short, plain-language explanation come back, written the way you'd expect a bank's support desk to explain it to a new customer. For example you may see something like this (your text may vary because LLM output is not deterministic!):
+
+```bash
+[user]: What does APR mean?
+[bfsi_support_desk_agent]: **APR** stands for **Annual Percentage Rate**. It's the yearly cost of borrowing money, shown as a percentage.
+
+Think of it this way: if you borrow $100 at 10% APR, you'll pay $10 in interest over one year (though payments are usually monthly, so it works out differently).
+
+APR helps you compare loans fairly because it includes the interest rate plus any fees the lender charges. A lower APR means you pay less to borrow money, so it's always good to look for the lowest APR when shopping for loans or credit cards.
+[user]:
+```
+
+Try a couple more terms if you like: EMI, KYC, overdraft. Type `exit` or press `Ctrl+C` when you're done.
 
 ## Step 4: Run it with `adk web`
 
@@ -99,7 +132,19 @@ and press Enter. Within a few seconds you should see a short, plain-language exp
 uv run adk web agents
 ```
 
-ADK will print a local URL, typically `http://127.0.0.1:8000`. Open it in your browser. You'll see a dropdown with one entry, `lesson02_first_agent`, select it, and you'll get a chat window that behaves the same way as `adk run`, just with a proper UI: message history, a text box, and a cleaner read on the agent's responses. Ask it the same banking-terms questions. Right now there's only one agent to pick from, but by the time we're a few lessons in, this dropdown will hold several, which is exactly why the project is structured this way.
+ADK will print a local URL, typically `http://127.0.0.1:8000`. Open it in your browser and you'll see something like this:
+
+<div align="center">
+    <image src="images/adk_web_ui.png" alt="adk web UI"/>
+</div>
+
+You'll see a dropdown with one entry, `lesson02_first_agent`, select it, and you'll get a chat window that behaves the same way as `adk run`, just with a proper UI: message history, a text box, and a cleaner read on the agent's responses. Ask it the same banking-terms questions - for example asking `What is APR` may give a response like this:
+
+<div align="center">
+    <image src="images/adk_web_ui2.png" alt="adk web UI Response"/>
+</div>
+
+Right now there's only one agent to pick from, but by the time we're a few lessons in, this dropdown will hold several, which is exactly why the project is structured this way.
 
 ## Step 5: Switch it to Gemini Flash
 
@@ -127,4 +172,6 @@ What you just built maps closely to the simplest possible LangGraph app: a singl
 
 This lesson used a handful of short exchanges on Claude Haiku, and the same again if you tried the Gemini Flash swap. Both are inexpensive per token for messages this short, and Gemini Flash specifically has a free tier that easily covers this kind of testing. You shouldn't see any meaningful cost from this lesson.
 
-Ready for Lesson 3, where this agent starts doing real work: calculating loan EMIs and affordability for a retail lending use case.
+## Conclusion
+
+In this lesson, we learnt how to build and test our very first agent, which could answer general questions on Retail banking terminology. In the next lesson, our agent will start doing some real work, like calculating loan EMIs and affordability for retail lending use case. 
