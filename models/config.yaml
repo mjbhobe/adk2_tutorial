@@ -1,0 +1,24 @@
+# config/models.yaml
+# Central model policy for the series.
+# Every agent should read its model from here, not hardcode a model string.
+
+models:
+  primary:
+    provider: anthropic
+    id: "claude-haiku-4-5-20251001"
+    litellm_id: "anthropic/claude-haiku-4-5-20251001"
+    use_when: "default choice for all agents unless a lesson says otherwise"
+
+  escalation:
+    provider: anthropic
+    id: "claude-sonnet-4-5"
+    litellm_id: "anthropic/claude-sonnet-4-5"
+    use_when: "only when Haiku's output quality is measurably insufficient, e.g. complex multi-step graph routing or compliance judgment calls"
+
+  fallback:
+    provider: google
+    id: "gemini-flash-latest"
+    use_when: "only when a feature requires it, e.g. built-in Google Search grounding or code execution, which do not work with non-Gemini models"
+
+# Per-lesson override example (lessons will add entries here as we go):
+lesson_overrides: {}

@@ -1,0 +1,26 @@
+# Secrets — never commit this
+.env
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+*.pyc
+
+# Virtual environments
+.venv
+
+# uv
+uv.lock.bak
+
+# ADK local storage / sessions
+.adk/
+*.db
+*.sqlite
+
+# OS / editor noise
+.DS_Store
+.vscode/*.log
