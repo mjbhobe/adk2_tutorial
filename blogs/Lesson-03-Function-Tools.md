@@ -281,9 +281,13 @@ A few things worth explaining about what's happening across these two files. The
 
 The `tools` parameter on `Agent(...)` is new: it's a list of plain Python functions, and ADK automatically wraps each one into a callable tool the model can invoke. You didn't need to write any schema, registration boilerplate, or JSON definitions by hand. ADK builds the function's schema (its name, its parameters, and their types) directly from the function's signature, using your type hints to know that `principal` is a number and `tenure_months` is an integer, for instance. It doesn't matter that the functions live in a separate file, ADK inspects each function object itself, not the file it was defined in.
 
-The docstring on each function matters more than it might look like. ADK takes the entire docstring, not just a one-line summary, and sends it to the model as the tool's description. This is how the model decides which tool to call and how to fill in the arguments correctly. A vague docstring produces a tool the model calls incorrectly or not at all; the detailed Args and Returns sections above are doing real work, not just satisfying a style guide. One caveat worth knowing: as of the current ADK release, per-parameter descriptions in the Args section aren't parsed out into a structured schema field individually, the whole docstring travels to the model as one block of text. Writing clear per-argument descriptions still helps, since the model reads that whole block, but don't expect them to show up as separate structured metadata if you go digging through the generated tool schema.
+> 📌 **NOTE**  
+> 
+> **The docstring on each function matters more than it might look like**. ADK takes the entire docstring, not just a one-line summary, and sends it to the model as the tool's description. This is how the model decides which tool to call and how to fill in the arguments correctly. A vague docstring produces a tool the model calls incorrectly or not at all; the detailed Args and Returns sections above are doing real work, not just satisfying a style guide. 
+>
+> One caveat worth knowing: as of the current ADK release, per-parameter descriptions in the Args section aren't parsed out into a structured schema field individually, the whole docstring travels to the model as one block of text. Writing clear per-argument descriptions still helps, since the model reads that whole block, but don't expect them to show up as separate structured metadata if you go digging through the generated tool schema. <br/><br/>
 
-Also notice the instruction text explicitly tells the model never to estimate a number itself and to always use the tools. This is a real, necessary line of defense: nothing stops a language model from confidently calculating a wrong EMI in its head if you don't tell it not to. Instructing it to only report tool outputs is what actually enforces the "let Python do the math" design.
+Also notice the agent's `instruction` text field explicitly tells the model never to estimate a number itself and to always use the tools. _This is a real, necessary line of defense_: nothing stops a language model from confidently calculating a wrong EMI in its head if you don't tell it not to. Instructing it to only report tool outputs is what actually enforces the "let Python do the math" design.
 
 ## Step 3: Run it
 
@@ -309,13 +313,22 @@ I earn 150,000 a month and already pay 20,000 in EMIs. Could I afford that same 
 
 You should see it call `check_loan_affordability` this time, and answer with a clear yes-or-no plus the maximum loan or EMI it calculated, rather than trying to reuse the previous answer.
 
-For the web UI:
+For the web UI, run the following command from your terminal (or your IDE's terminal - I use VS Code). Make sure that the local environment is active.
 
 ```bash
+# to ensure local environment is active run this command
+source .venv/bin/activate # or .venv\Scripts\activate on Windows
+# run this command to bring up the Web UI
 uv run adk web agents
 ```
 
-Open the printed URL, select `lesson03_loan_tools` from the dropdown, and ask the same two questions. The web UI is worth using here specifically because it will visibly show you the tool call and its raw return value as a separate step in the conversation, before the model's final worded response, which is a good way to build intuition for what's actually happening between your question and the answer you see.
+You should see a web url (usually http://127.0.0.1:8000) displayed in your terminal. Click on that URL to open the ask web interface - mine opens in VS Code (my preferred IDE), your's could open in your default browser. Click the downdown at the very top that reads "Select an app" and pick `lesson03_loan_tools`, and ask the same two questions in the text box that reads `Type a message` at the bottom of the window. For example, the response to the first question `What would my monthly payment be on a 1,000,000 loan at 8.5% interest for 20 years?`, looks something like this in my IDE
+
+<div align="center">
+    <image src="images/adk_web_ui_loan_tools.png" alt="ADK Web Session with Loan Tools"/>
+</div>
+
+The web UI is worth using here specifically because it will visibly show you the tool call and its raw return value as a separate step in the conversation, before the model's final worded response, which is a good way to build intuition for what's actually happening between your question and the answer you see. 
 
 ## If you're coming from LangChain or LangGraph
 
@@ -325,8 +338,15 @@ If you've defined tools in LangChain before, this will feel familiar: LangChain 
 
 We started with a loan officer manually punching numbers into a spreadsheet for every EMI and affordability question. Now a customer can ask either question in plain language, and the agent produces a correct answer, backed by real arithmetic running in Python, not by the model guessing. The critical design choice was keeping the model out of the math entirely: it identifies intent and extracts numbers from a sentence, which is what LLMs are actually reliable at, and hands the arithmetic itself off to deterministic code, which is what LLMs are not reliable at.
 
+Such an agent could also be intergrated into a chat application like we developed in Lesson 2 and the user could ask the bank's chat application these questions from her mobile or laptop without ever visiting the bank!
+
 ## A word on cost
 
 Each question in this lesson costs slightly more than Lesson 2's plain chat, since a tool call adds an extra round trip: the model first decides to call a function, then receives the result and turns it into a worded answer. On Claude Haiku this is still a fraction of a cent per exchange, tool-calling overhead on a small model like Haiku is not something you need to budget carefully for at this scale, but it's worth noticing the shape of the cost now, since it becomes more relevant once we're chaining several tool-calling agents together starting in Lesson 8.
 
-Ready for Lesson 4, where we bring in ADK's built-in tools, including live market data and Google Search grounding, and run into the Gemini-only limitation we flagged back in the series introduction.
+## Conclusion
+
+In this lesson we gave an agent its first real capability: the ability to use tools (calling Python functions instead of just generating text). The loan desk assistant now calculates real EMIs and checks real loan affordability using deterministic arithmetic, with the model's role limited to understanding the customer's question, extracting the right numbers, and calling the right tool, never doing the math itself. 
+
+In the next lesson we stay with tools, but shift to a different kind: built-in tools that ADK ships out of the box rather than ones you write yourself, including live web search grounding. We'll also run into a real limitation, ADK's built-in Google Search tool only works with Gemini models, we'll cover how we can overcome that with a custom search function that models other than Gemini can use.
+
