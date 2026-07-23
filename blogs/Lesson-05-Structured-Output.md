@@ -4,13 +4,13 @@ Lesson 4 gave an agent access to live data and current web information. Everythi
 
 ## The problem we're solving
 
-A retail bank's underwriting desk has loan officers reviewing applicant files and writing up a risk assessment for each one: a risk tier, a recommendation, a note on the key concerns. Today that write-up is free text, and free text is a real operational problem here. One officer writes "high risk, wouldn't approve," another writes "Risk: High. Recommend decline. Reasons: thin credit history, high DTI." Nothing downstream, the approval queue, the audit trail, the regulator-facing report, can reliably parse either one, because there's no guaranteed structure. Someone ends up manually re-keying every assessment into a spreadsheet before it's usable anywhere else.
+A retail bank's underwriting desk has loan officers reviewing applicant files and writing up a risk assessment for each one: a risk tier, a recommendation, a note on the key concerns. Today _that write-up is free text, and free text is a real operational problem here_. One officer writes "high risk, wouldn't approve," another writes "Risk: High. Recommend decline. Reasons: thin credit history, high DTI." Nothing downstream, the approval queue, the audit trail, the regulator-facing report, can reliably parse either one, because there's no guaranteed structure. Someone ends up manually re-keying every assessment into a spreadsheet before it's usable anywhere else.
 
 We're going to build an agent that produces a credit risk assessment as its output, but instead of a paragraph, it returns a fixed, validated JSON shape every time: a risk tier that's always one of three exact values, a boolean recommendation, a maximum recommended loan amount, a list of specific risk factors, and a short rationale. Every field, every time, in the same shape, ready to be written straight into a database row or an API call without anyone touching it by hand.
 
 ## Why structured output needs special handling
 
-Left alone, an LLM's output is just text, and text is inherently unpredictable in its exact shape. You can ask a model nicely to "please respond in JSON with these fields," and modern models are decent at following that instruction, but "decent" isn't good enough for a downstream system that will throw an error, or silently accept garbage, the moment a field is missing, misspelled, or comes back as a string instead of a number. Prompting alone gives you a JSON-shaped suggestion, not a guarantee.
+Left alone, an LLM's output is just text, and text is inherently unpredictable in its exact shape. You can ask a model nicely to _"please respond in JSON with these fields,"_. Modern models are decent at following that instruction, but "decent" isn't good enough for a downstream system that will throw an error, or silently accept garbage, the moment a field is missing, misspelled, or comes back as a string instead of a number. Prompting alone gives you a JSON-shaped suggestion, **not a guarantee**.
 
 ADK's `output_schema` closes that gap by working at a different level than the prompt. You define the exact shape you want as a Pydantic model, a Python class describing each field's name, type, and (optionally) a description. When you attach that schema to an agent, ADK passes it to the model as a formal constraint on the response, not just an instruction in the prompt text, and validates the model's final answer against it. If the response doesn't match the schema, that's a failure ADK can catch, rather than something a downstream system finds out about the hard way, three steps later, after a $0 has silently made it into a loan amount field.
 
@@ -71,7 +71,7 @@ Nothing new here structurally, this is the same pattern from Lesson 3: a typed f
 Create `agents/lesson05_credit_risk/agent.py`:
 
 ```python
-"""BFSI Lesson 5: Structured Output.
+"""Lesson 5: Structured Output.
 
 A credit risk assessment agent for a retail bank's underwriting desk.
 It calls a tool to compute a real debt-to-income ratio, then returns
@@ -151,11 +151,14 @@ The `CreditRiskAssessment` class is the new concept in this lesson, so it's wort
 
 The `Field(description=...)` on each attribute isn't decoration, it's read by the model as part of the schema, and it's the main lever you have over how a field gets filled in beyond the type itself. Compare this to Lesson 3's docstrings: there, the whole docstring became one block of context for a tool call. Here, each field's description is attached to that specific field in the schema the model receives, so this is actually more targeted guidance than what a plain docstring gives you for a function tool.
 
-Notice that `tools=[calculate_debt_to_income_ratio]` and `output_schema=CreditRiskAssessment` sit on the agent together. Internally, ADK lets the model call the DTI tool as many times as it needs while it works through the applicant's numbers, and only locks the response down to the `CreditRiskAssessment` shape once it's ready to give its final answer. You don't have to do anything to coordinate that sequencing yourself, it's handled automatically based on the two parameters you set.
+Notice that `tools=[calculate_debt_to_income_ratio]` and `output_schema=CreditRiskAssessment` sit on the agent together. Internally, ADK lets the model call the `calculate_debt_to_income_ratio` tool as many times as it needs while it works through the applicant's numbers, and only locks the response down to the `CreditRiskAssessment` shape once it's ready to give its final answer. You don't have to do anything to coordinate that sequencing yourself, it's handled automatically based on the two parameters you set.
 
 ## Step 3: Run it
 
 ```bash
+# ensure your correct environment is activated
+source .venv/bin/activate
+# run it in adk web 
 uv run adk web agents
 ```
 
@@ -167,7 +170,36 @@ Applicant has a monthly income of 120,000, existing monthly debt payments of 55,
 
 You should see the agent call `calculate_debt_to_income_ratio` first, and then, instead of a written paragraph, the final response should render as a structured object with all five fields filled in: a risk tier, a true/false recommendation, a maximum recommended amount, a list of specific risk factors, and a short rationale. In `adk web` specifically, structured output like this typically renders as a clean, labeled JSON block rather than prose, which makes it obvious at a glance that you're looking at something different from Lesson 4's free-text answers.
 
+Here is what I see:
+
+<div align="center">
+    <image src="images/credit_check1.png" alt="Credit Check - Claude"/>
+</div>
+
 Try a second applicant with a clearly lower DTI and a longer employment history, and compare the two verdicts. You should see the risk tier and recommendation shift accordingly, while the shape of the response, the five fields, their types, stays identical both times. That consistency is the entire point of this lesson.
+
+```
+Applicant has a monthly income of 150,000, existing monthly debt payments of 30,000 including the new loan, 8 years at their current employer, and no missed payments on record.
+```
+
+And here is what I see for this prompt
+
+<div align="center">
+    <image src="images/credit_check2.png" alt="Credit Check - Claude"/>
+</div>
+
+And for this prompt (High risk category):
+
+```
+Applicant has a monthly income of 60,000, existing monthly debt payments of 42,000 including the new loan, only 4 months at their current employer, and two missed payments on other loans in the past year.
+```
+
+And this is what I see.
+
+<div align="center"> 
+    <image src="images/credit_check3.png" alt="Credit Check 3- Claude"/>
+</div>
+
 
 ## If you're coming from LangChain or LangGraph
 
