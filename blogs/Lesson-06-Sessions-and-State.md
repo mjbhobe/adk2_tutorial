@@ -91,14 +91,15 @@ def record_kyc_detail(
 
 A few things here are new compared to Lesson 3's tools. The `tool_context: ToolContext` parameter isn't something the model provides, ADK recognizes this parameter by its type and injects the real context object automatically at call time; the model only ever sees and fills in `field_name` and `field_value` in its function call. This is how a tool gets access to session state at all: without `ToolContext`, a tool function has no way to read or write anything beyond its own arguments and return value.
 
-Inside the function, `tool_context.state.get("kyc_data", {})` reads whatever's already been collected (an empty dict on the very first call), adds the new field, and writes the whole dict straight back with `tool_context.state["kyc_data"] = kyc_data`. That reassignment matters: always write the full value back to its key after modifying it, rather than assuming an in-place mutation on a nested object is enough, since state changes are tracked as explicit key assignments. The function also writes a second key, `kyc_status`, a short human-readable summary of what's still missing. That second key is what we're about to wire directly into the agent's own instructions.
+Inside the function, `tool_context.state.get("kyc_data", {})` reads whatever's already been collected (an empty dict on the very first call), adds the new field, and writes the whole dict straight back with `tool_context.state["kyc_data"] = kyc_data`. **That reassignment matters:** _always write the full value back to its key after modifying it, rather than assuming an in-place mutation on a nested object is enough_, since state changes are tracked as explicit key assignments. The function also writes a second key, `kyc_status`, a short human-readable summary of what's still missing. That second key is what we're about to wire directly into the agent's own instructions.
 
 ## Step 2: Build the agent, with state-aware instructions
 
 Create `agents/lesson06_kyc_onboarding/agent.py`:
 
 ```python
-"""BFSI Lesson 6: Sessions & State.
+"""
+Lesson 6: Sessions & State.
 
 A KYC onboarding agent for a retail bank's digital account-opening
 flow. It collects required customer details one or two at a time
@@ -146,7 +147,7 @@ from . import agent
 
 The line doing the real work here is `Current progress: {kyc_status?}.` inside the instruction string. Before every single turn, ADK looks for `{...}` patterns in the instruction, and any it finds get replaced with the current value of that key in session state. So on turn one, `{kyc_status?}` resolves to whatever the DTI-style default is (nothing yet, since no field has been recorded), and by turn four, after a couple of tool calls, that same placeholder resolves to a live string like "Still missing: id_type, id_number, employment_status, source_of_funds." The agent is, in effect, being reminded of its own progress on every turn, without you writing a single line of code to manage that reminder yourself.
 
-The trailing `?` on `{kyc_status?}` is not optional stylistically, it's functionally required here, and it's worth understanding why. If a state key referenced in an instruction hasn't been set yet and you leave off the `?`, ADK raises an error rather than silently substituting an empty string, since an unmarked placeholder is treated as a required value. Our `kyc_status` key doesn't exist in state until `record_kyc_detail` runs for the first time, which means the very first message of every conversation, before any field has been collected, would crash without the `?`. Marking it optional tells ADK to substitute an empty string instead when the key isn't there yet, which is exactly the behavior we want for a field that only gets populated partway through the conversation.
+**The trailing `?` on `{kyc_status?}` is not optional stylistically**, it's functionally required here, and it's worth understanding why. If a state key referenced in an instruction hasn't been set yet and you leave off the `?`, ADK raises an error rather than silently substituting an empty string, since an unmarked placeholder is treated as a required value. Our `kyc_status` key doesn't exist in state until `record_kyc_detail` runs for the first time, which means the very first message of every conversation, before any field has been collected, would crash without the `?`. Marking it optional tells ADK to substitute an empty string instead when the key isn't there yet, which is exactly the behavior we want for a field that only gets populated partway through the conversation.
 
 One more thing worth knowing, since it affects how you test this: the session state you're building up only lives as long as the current `adk run` or `adk web` process keeps running, in this default local setup. Close the CLI or restart the web server, and you're starting from a fresh, empty session next time. That's fine for this lesson, and fine for local development generally, but it's also exactly the gap Lesson 7 picks up: state here is scoped to a single ongoing conversation, not to the customer across separate visits days apart, which is a different concept ADK calls memory.
 
