@@ -28,8 +28,8 @@ AGENT_INSTRUCTION = (
 )
 
 root_agent = Agent(
-    name="market_briefing_agent_gemini_grounded",
-    model="gemini-flash-latest",
+    name="market_briefing_agent",
+    model="gemini-3.5-flash-lite", # "gemini-flash-latest",
     instruction=AGENT_INSTRUCTION,
     description=(
         "Provides live stock prices and Google-Search-grounded news, "

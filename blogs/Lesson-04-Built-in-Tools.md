@@ -1,26 +1,24 @@
-# Lesson 4: Built-in Tools & Grounding
+# Lesson 4: Built-in Tools
 
 Lesson 3 gave an agent function tools you wrote yourself. This lesson introduces a different category: tools that ADK ships built in, where the model calls out to a capability Google runs on its own infrastructure rather than code sitting in your project. We'll build  and agent with one directly - `google_search`, hit a real, current limitation along the way, and then build a genuine, working alternative for Claude, since Claude is our default for this series.
 
 ## The problem we're solving
 
-A wealth management desk's investment research team gets asked two kinds of questions constantly: "What's Reliance Industries trading at right now?" and "Why did Tesla's stock move today?" The first is a data lookup, exactly the kind of thing Lesson 3's function tools handle well. The second is different: it needs current information from the open web, something that changed today, which no model's training data can possibly contain.
+A wealth management desk's investment research team gets asked two kinds of questions constantly: "What's Reliance Industries trading at right now?" and "Why did Tesla's stock move today?" The first is a data lookup, exactly the kind of thing Lesson 3's function tools handle well. The second request would need a slightly different approach - get the latest information from the web about Tesla to the LLM and let it figure out why Tesla's stock moved today. That's exactly what Google's search excels
+at, and what we are going to leverage for the 2nd kind of request.
 
-That second kind of question is what "grounding" means in this context: giving a model access to live, current information from outside its training data, so its answer reflects what's actually happening right now rather than what was true whenever it was trained. 
-
-
-We're going to build a market briefing agent that handles both: live prices via a function tool, and current news via grounding. For live stock prices we'll use the `yfinance` library and we'll use an internal tool `google_search` for web searching.
+We're going to build a market briefing agent that handles both: live prices via a function tool, and current news via web search. For live stock prices we'll use the `yfinance` library and we'll use an internal tool `google_search` for web searching.
 
 Add the dependency, by running the following commands on a terminal from the project root folder.
 
 ```bash
 # ensure your uv environment is active
 source .venv/bin/activate # or .venv\Scripts\activate on Windows
-# add the module
+# add the yfinance module
 uv add yfinance
 ```
 
-`yfinance` pulls market data from Yahoo Finance for free, no API key required, and works for US, Indian (NSE/BSE), and European tickers alike. No additional dependencies required for `google_search` as it's an in-built tool.
+`yfinance` pulls market data from Yahoo Finance for free, no API key required, and works for US, Indian (NSE/BSE), and European tickers alike. No additional dependencies required for `google_search` as it's a tool built into the ADK by Google.
 
 Create the shared tools file. We're putting this in the `agents/common/` folder, since a stock price lookup is generic enough to be reused by other lessons later in this series.
 
@@ -60,7 +58,9 @@ def get_stock_price(ticker: str) -> dict:
                 ),
             }
 
+        # grab last record in history
         latest = history.iloc[-1]
+        # grab prev to last record in history, if it exists, else use last
         previous = history.iloc[-2] if len(history) > 1 else latest
         latest_close = float(latest["Close"])
         previous_close = float(previous["Close"])
@@ -95,16 +95,18 @@ def get_stock_price(ticker: str) -> dict:
 
 This returns a dict with a `found` flag and either the data or an error message, rather than letting an exception escape. That matters specifically for tool functions: if this raised an uncaught exception on a bad ticker, the whole agent turn would fail. Returning a structured "not found" result instead lets the model see what went wrong and respond sensibly, for example by asking the customer to double check the ticker symbol.
 
-> 📌**NOTE:** Every tool function in this series returns a dict, and it's worth knowing why, since it's not an arbitrary style choice. The underlying function-calling spec that Gemini, Claude, and most providers share requires a tool's result to reach the model as a dict-shaped payload. ADK enforces this at the framework level: if a tool returns anything else, a plain string, a number, a list, ADK automatically wraps it into `{"result": <value>}` before sending it back, so returning a non-dict wouldn't actually break anything.
+> 📌**NOTE:** Every tool function in this series returns a dict, and it's worth knowing why, since it's not an arbitrary style choice. 
+>
+> The underlying **function-calling spec** that Gemini, Claude, and most providers share **requires a tool's result to reach the model as a dict-shaped payload**. ADK enforces this at the framework level: if a tool returns anything other than a `dict` shaped result, for example a plain string, a number, a list, then ADK will automatically wrap it into `{"result": <value>}` dict before sending it back, so returning a non-dict wouldn't actually break anything.
 >
 > Returning a dict yourself is what gives you control over that shape instead of accepting the generic, unlabeled `result` wrapper. It's also what makes error handling legible to ADK itself: `FunctionTool` includes a built-in telemetry hook that checks specifically for a dict containing an `error` key to detect and log tool failures. The `found` / `error` pattern used here isn't just readable to the model, it's a shape ADK's own internals are already built to recognize.
 
 Notice too that `get_stock_price` uses `stock.history()` rather than `stock.info` as the primary source for the price itself. Yahoo Finance's `.info` endpoint is known to be less reliable and more prone to rate-limiting than the historical-data endpoint, so we only fall back to `.info` for the company name, wrapped in its own `try/except` so a failure there doesn't take down the whole function.
 
-Now build the agent. Create `agents/lesson04_market_briefing_gemini_grounded/agent.py`:
+Now let's code the agent. Create `agents/lesson04_built_in_tools/agent.py`:
 
 ```python
-"""Lesson 4: Built-in Tools & Grounding (Gemini variant).
+"""Lesson 4: Built-in Tools 
 
 A market briefing agent for an investment research desk, using
 Gemini's built-in google_search tool for news grounding alongside a
@@ -128,24 +130,22 @@ AGENT_INSTRUCTION = (
 )
 
 root_agent = Agent(
-    name="market_briefing_agent_gemini_grounded",
-    model= "gemini-3.5-flash-lite", #"gemini-flash-latest",
+    name="market_briefing_agent",
+    model= "gemini-3.5-flash-lite",
     instruction=AGENT_INSTRUCTION,
     description=(
         "Provides live stock prices and Google-Search-grounded news, "
-        "using Gemini's built-in search grounding tool."
+        "using Gemini's built-in search tool."
     ),
     tools=[get_stock_price, GoogleSearchTool(bypass_multi_tools_limit=True)],
 )
 ```
 
-Using Gemini for this agent isn't incidental, and it's worth naming directly since Claude has been our default in every lesson so far. This is a specific limitation - internal tools like `google_search`/`GoogleSearchTool` work only on Google's own model-serving infrastructure and cannot be used with non-Gemini models. If we use `model=get_model("primary")` as we have been doing so far, which points to a Claude model (specifically Claude Haiku), the agent will fail at runtime. We will address this limitation with a custom search function later in this lesson.
+**Hey, where's my Claude model?** 🤨
 
-> 📌 **NOTE:** This agent uses `"gemini-flash-latest"` rather than a specific dated version like `"gemini-2.5-flash"`, which you may have noticed in ADK 1.x examples (if you have seen them). It's worth understanding the trade-off before you copy this pattern elsewhere. `-latest` is a rolling alias: Google points it at _whatever the current best Flash release is, and hot-swaps it to a newer one over time_, so your code automatically picks up model improvements without you ever touching it. That's genuinely convenient for a tutorial series like this one, where the point is learning ADK's mechanics, not chasing model version numbers.
->
-> It's not free of risk, though. Because the alias isn't pinned, it's possible for the model behind it to be retired without your code changing at all, and there's a real, documented case of exactly this: an ADK GitHub issue from mid-2026 describes `gemini-flash-latest` failing with a confusing 404 error after Google deprecated the specific model version the alias had been pointing to, with no clear indication in the error message that the alias itself was the problem. If you ever hit an unexplained 404 on a Gemini call in this series, that's the first thing to check, and the fix is simply to swap in an explicit, dated model ID, such as `"gemini-2.5-flash"`, in place of the alias. For this series, we're keeping the alias for its convenience, but in a production system, you'd generally want to pin an exact version and upgrade deliberately, on your own schedule, rather than have Google change what your code points to.
+An astute reader will immediately notice that we are not using our Claude model with this agent - instead we now have `model="gemini-3.5-flash-latest"` appearing instead. This isn't incidental; we aren't just showing how easy it is to switch to another LLM with ADK (which is really that easy by the way!). This is infact a fundamental limitation of ADK with internal tools. **Internal tools like Google Search work only on Google's own model-serving infrastructure and cannot be used with non-Gemini models**. If we use `model=get_model("primary")` as we have been doing so far, which points to a Claude model (specifically Claude Haiku), the agent will fail at runtime. We will address this limitation with a custom search function later in this lesson.
 
-Create `agents/lesson04_market_briefing_gemini_grounded/__init__.py`:
+Create `agents/lesson04_built_in_tools/__init__.py`:
 
 ```python
 from . import agent
@@ -155,17 +155,19 @@ One detail here needs a word of explanation before you run it, especially if you
 
 That's what `GoogleSearchTool(bypass_multi_tools_limit=True)` is for. Instead of using the pre-built `google_search` instance, we construct the underlying `GoogleSearchTool` class ourselves and pass the flag that explicitly opts into combining it with other tools. This flag has been available since ADK 1.16 release, well before ADK 2.0, so this isn't a 2.x-only capability; if you've been working with a recent ADK 1.x codebase, you've had access to this fix the whole time, you just needed to know it existed 😮!
 
-Under the hood, setting the flag causes ADK to run the search as an isolated sub-agent call rather than a true inline model built-in: a separate, hidden model invocation handles the search and hands the result back to the main agent. That's also the answer to a fair question this raises: _"if the fix is one keyword argument, why isn't it just the default behavior of `google_search` itself?"_ Because it isn't actually free. That hidden sub-agent call is a genuine extra model invocation, with its own latency and its own token cost, every single time search fires. If Google had made this the default, every existing single-tool search agent out there would have silently started making an extra hidden model call per search, with no code change and no warning, changing everyone's cost and latency profile overnight. You should, in fact, thank Google for this 🥲.
+Under the hood, setting the flag causes ADK to run the search as an isolated sub-agent call rather than a true inline model built-in: a separate, hidden model invocation handles the search and hands the result back to the main agent. That raises a fair question: _"if the fix is one keyword argument, why isn't it just the default behavior of `google_search` itself?"_ Because it isn't actually free. That hidden sub-agent call is a genuine extra model invocation, with its own latency and its own token cost, every single time search fires. If Google had made this the default, every existing single-tool search agent out there would have silently started making an extra hidden model call per search, with no code change and no warning, changing everyone's cost and latency profile overnight. You should, in fact, thank Google for this 😊.
 
-**The rule of thumb going forward:** reach for the plain `google_search` singleton when search grounding is the only tool on an agent, and switch to `GoogleSearchTool(bypass_multi_tools_limit=True)` explicitly (knowing you'll incur more token costs!) the moment you need to combine it with anything else, exactly like we're doing here. One thing that flag does not change: it only relaxes the one-built-in-tool-per-agent restriction, not the model restriction, so `GoogleSearchTool`, with or without `bypass_multi_tools_limit`, still works _only with Gemini_ models 🙁. We'll come back to why this tool is written the way it is, and why the model is Gemini specifically, right after you've run it.
+**The rule of thumb going forward:** reach for the plain `google_search` singleton when search grounding is the _only tool_ on an agent, and switch to `GoogleSearchTool(bypass_multi_tools_limit=True)` explicitly (knowing you'll incur more token costs!) the moment you need to combine it with anything else, exactly like we're doing here. 
 
-Ok, enough of _gyan_. Let's run our agent! Run the following command(s) from a command prompt:
+One thing that flag does not change though: it only relaxes the one-built-in-tool-per-agent restriction, not the model restriction, so `GoogleSearchTool`, with or without `bypass_multi_tools_limit`, still works _only with Gemini models_ 🙁. 
+
+Ok, enough of _gyan_. Let's run our agent! Type in the following command(s) from a command prompt:
 
 ```bash
 # ensure your uv environment is active
 source .venv/bin/activate # or .venv\Scripts\activate on Windows
 # run the agent
-uv run adk run agents/lesson04_market_briefing_gemini_grounded
+uv run adk run agents/lesson04_built_in_tools
 ```
 
 Ask about a price:
@@ -176,9 +178,7 @@ What's Reliance Industries trading at? Ticker is RELIANCE.NS
 
 You should see it call `get_stock_price` and come back with a current close price, the previous close, and the percentage move, worded as a short factual statement. I got a response like the following - your's would be different as it's a _live_ price that is displayed. Check on the Yahoo Finance! website that it shows the same values. Mine tallied, so all good!
 
-<div align="center">
-    <image src="images/google_agent_stock_response.png" alt="Stock quote response"/>
-</div>
+> [market_briefing_agent]: Reliance Industries Limited (RELIANCE.NS) is trading at **₹1,267.70**, down **-0.96%** (a decrease of ₹12.30) from its previous close of ₹1,280.00.
 
 Then ask about news, in the same session:
 
@@ -194,21 +194,21 @@ For the web UI:
 uv run adk web agents
 ```
 
-Select `lesson04_market_briefing_gemini_grounded` and try the same two questions there.
+Select `lesson04_built_in_tools` and try the same two questions there.
 
 ## Built-in tools versus function tools
 
 You just used two different kinds of tool in the same agent, `get_stock_price` and `GoogleSearchTool`, and they work in fundamentally different ways.
 
-A function tool, like `get_stock_price`, is code you write and ADK exposes to the model. A built-in tool is different: it's a capability the model provider runs internally, on their own servers, as part of generating a response. When you give Gemini the `google_search` built-in tool, Gemini itself performs the search as part of its inference process and folds the results into its answer, you never see a separate "search API call" happening in your code the way you do with a function tool, which is exactly what you just observed: a visible tool call for the price, and no equivalent visible call for the news.
+A function tool, like `get_stock_price`, is code you write and ADK exposes to the model. A built-in tool is different: it's a capability Google runs internally, on their own servers, as part of generating a response. When you give Gemini the `google_search` built-in tool, Gemini itself performs the search as part of its inference process and folds the results into its answer, you never see a separate "search API call" happening in your code the way you do with a function tool, which is exactly what you just observed: a visible tool call for the price, and no equivalent visible call for the news.
 
-This is also why the agent you just built had to use Gemini specifically. Built-in tools are wired into a particular model provider's infrastructure, they're not portable code you can hand to any model. `google_search` is Gemini-only because it depends on machinery inside Google's model-serving stack that simply doesn't exist for Claude. If you're curious what that looks like in practice, try editing this agent's `agent.py` to use `model="claude-haiku-4-5-20251001"` (wrapped in `AnthropicLlm`, as always) while keeping `GoogleSearchTool` in its tools list, then ask it a news question. You should see it fail with an error naming the model as unsupported for Google Search. Revert the change once you've seen it; we're not using this agent with Claude going forward.
+This is also why the agent you just built had to use Gemini models only. Built-in tools are wired into a particular model provider's infrastructure, they're not portable code you can hand to any model. `google_search` is Gemini-only because it depends on machinery inside Google's model-serving stack that simply doesn't exist for Claude. If you're curious what that looks like in practice, try editing this agent's `agent.py` to use `model="claude-haiku-4-5-20251001"` (wrapped in `AnthropicLlm`, as always) while keeping `GoogleSearchTool` in its tools list, then ask it a news question. You should see it fail with an error naming the model as unsupported for Google Search. Revert the change once you've seen it; we're not using this agent with Claude going forward.
 
-That failure is the actual problem for us: Claude is this series' default model, and a Gemini-exclusive tool means Claude-based agents are locked out of grounded, current information unless we build an equivalent ourselves. Function tools have no such restriction, since they're just Python functions ADK calls on your behalf, which is exactly why a custom search function tool is a real, working substitute here, not a workaround with caveats attached. That's what we're building next.
+That failure is the actual problem for us: Claude is our preferred model, and a Gemini-exclusive tool means Claude-based agents are locked out of grounded, current information unless we build an equivalent ourselves. Function tools have no such restriction, since they're just Python functions ADK calls on your behalf, which is exactly why a custom search function tool is a real, working substitute here, not a workaround with caveats attached. That's what we're building next.
 
 ## Step 2: Build a custom search tool and a Claude-based agent
 
-This time we're reaching for Tavily, a search API purpose-built for AI agents rather than for a person scanning a results page. It returns clean, structured results (title, URL, content snippet, relevance score) instead of raw HTML to parse, and it has a search mode aimed specifically at finance-related queries, a good fit for a BFSI series. But it needs an API key and has quota restructions for free-usage, which are good enough when learning ADK concepts.
+This time we're reaching for Tavily, a search API purpose-built for AI agents rather than for a person scanning a results page. It returns clean, structured results (title, URL, content snippet, relevance score) instead of raw HTML to parse, and it has a search mode aimed specifically at finance-related queries, a good fit for a BFSI series. To use Tavily, you'll need an API key and you'll need to add the Tavily module to our local environment. The API key has quota restructions for free-usage, which are good enough when learning ADK concepts.
 
 **Get a free API key:**
 
@@ -226,7 +226,9 @@ TAVILY_API_KEY=your-tavily-key-here
 
 Tavily's free tier gives you a monthly credit allowance that's generous enough for working through this series, but it is metered, unlike other search tools like DuckDuckGo. Keep that in mind if you find yourself re-running this lesson's queries many times over.
 
-Add the dependency - run these commands from a terminal and from the root folder of this project.
+**Add the dependency**
+
+Run these commands from a terminal and from the root folder of this project.
 
 ```bash
 # ensure your uv environment is active
@@ -253,14 +255,13 @@ def get_stock_news(company_or_ticker: str, max_results: int = 5) -> dict:
     finance-specific search mode for more relevant results.
 
     Args:
-        company_or_ticker: The company name or ticker symbol to search
-            news for, e.g. "Tata Motors" or "TSLA".
+        company_or_ticker: The company name or ticker symbol to search news for, e.g. "Tata Motors" or "TSLA".
         max_results: Maximum number of news results to return.
             Defaults to 5.
 
     Returns:
         A dict with a list of articles, each containing a title,
-        short snippet, and source URL.
+        short snippet, and the source URL.
     """
     try:
         api_key = os.environ.get("TAVILY_API_KEY")
@@ -292,7 +293,7 @@ def get_stock_news(company_or_ticker: str, max_results: int = 5) -> dict:
         return {"found": False, "query": company_or_ticker, "error": str(error)}
 ```
 
-Same defensive pattern as `get_stock_price`: every failure path returns a structured dict rather than raising, so a bad or empty search doesn't crash the agent turn.
+We use the same defensive pattern as `get_stock_price`: every failure path returns a structured dict rather than raising, so a bad or empty search doesn't crash the agent turn.
 
 Now build the Claude-side agent. **NOTE** - this is created in a separate folder than the Google agent - don't create in same folder! 
 
@@ -300,7 +301,7 @@ Create `agents/lesson04_market_briefing/agent.py`:
 
 ```python
 """
-Lesson 4: Built-in Tools & Grounding (Claude variant).
+Lesson 4: Built-in Tools (Claude variant).
 
 The same market briefing agent, but running on Claude. Live prices
 still come from get_stock_price; current news now comes from
@@ -352,7 +353,7 @@ Structurally, there's nothing new in this file if you've done Lesson 3: two func
 uv run adk web agents
 ```
 
-You'll now see both agents in the dropdown: `lesson04_market_briefing` (Claude) and `lesson04_market_briefing_gemini_grounded` (Gemini). Ask both the same two questions.
+You'll now see both agents in the dropdown: `lesson04_market_briefing` (Claude) and `lesson04_built_in_tools` (Gemini). Ask both the same two questions.
 
 Price:
 
@@ -407,7 +408,7 @@ Stock price lookups via `yfinance` are free and don't touch your LLM token budge
 
 ## Conclusion
 
-Whew! That concludes a rather long, and I daresay tedious in some places, lesson. 
+Whew! That concludes a rather long, and dare I say _tedious_ in some places, lesson. 
 
 In this lesson, we gave an agent access to current information from beyond its training data, first the native way, using Gemini's built-in `google_search` | `GoogleSearchTool(...)` tool, and then a portable way, using a free function tool that gets Claude to the same outcome. Along the way, we saw exactly why `google_search` is Gemini-only (it runs inside Google's own model-serving infrastructure, not as portable code) and built a genuine substitute rather than working around the limitation. Since Claude is this series' default, having a working, non-Gemini path to grounded, cited answers means the model policy from the series introduction holds up even for a capability ADK markets as Gemini-exclusive.
 
