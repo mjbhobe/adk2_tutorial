@@ -1,4 +1,4 @@
-I am developing a blog series to help developers create Agents with the Google Agent Development Ki (ADK). We have developed lessons that cover all the features of an ADK agent such as Agent definitions, tools, sessions & state, long term memory, serving layer etc.
+﻿I am developing a blog series to help developers create Agents with the Google Agent Development Ki (ADK). We have developed lessons that cover all the features of an ADK agent such as Agent definitions, tools, sessions & state, long term memory, serving layer etc.
 
 Now I want to create an image that correctly & visually represents the anatomy of an ADK agent with all above features. Can you generate one from the summary below? Use the same color palette, font sizes & icons you have used so far, but give me an image that connects all the features correctly. Don't just go by my previous instructions - challenge me by refering to latest ADK 2.x documentation and making all corrections so that the resulting image is the correct representation.
 
@@ -83,3 +83,99 @@ So to summarize my suggestion:
 - We should also implement a "console" interface where we "collect" needed info from user and call our Agent endpoint, just to illustrate various ways in which Agent can be called once it's running behind an API endpoint
 - Then conclude with why we introduced this in a dedicated lesson, and explain that from next lesson, we'll be following this approach. We created this dedicated lesson to focus on all concepts, so from next lesson we can just focus on the business problem & additional ADK features we'll introduce.
 
+============================
+Here is a structured, compelling case you can use to persuade your colleague (or present in your tutorial introduction) on why transitioning to a programmatic `main.py` is necessary for teaching ADK 2.x Sessions and State.
+
+---
+
+## The Core Thesis
+
+> **Running `adk run` hides the exact architecture ADK was designed to solve.** `adk run` is a CLI developer harness meant for rapid prompt testing; `main.py` is where the **framework architecture lives**. If a student only learns `adk run`, they are learning how to use an execution CLI, not how to write software with ADK 2.x.
+
+---
+
+## 4 Pillars for the `main.py` Approach
+
+### 1. It Demystifies the ADK Architectural Triangle
+
+In ADK 2.x, state management isn't just a parameter in a prompt—it relies on three foundational abstractions working together:
+
+1. **`SessionService`** (Where state lives — e.g., `InMemorySessionService`, `DatabaseSessionService`)
+2. **`Session`** (The container holding `state` dictionary and immutable `events`)
+3. **`Runner`** (The orchestration engine that connects the `Agent` to the `SessionService`)
+
+* **With `adk run / adk web`:** All three of these objects are created under the hood. To a student, state looks like magic text interpolation (`{user_name}`) happening inside a black box.
+* **With `main.py`:** Students write `service = InMemorySessionService()`, `session = await service.create_session(...)`, and `runner = Runner(...)`. They immediately understand that state is a tangible Python dictionary managed by a dedicated service layer.
+
+---
+
+### 2. It Demonstrates Programmatic State Mutation (Pre-populating State)
+
+Real-world production agents rarely start with an empty session state. Typically, backends inject user data (e.g., `user_id`, account tier, database records) into `session.state` **before** the first message is even sent to the LLM.
+
+* **With `adk run`:** You cannot easily show how an external application pre-fills `session.state` from a database before invoking the agent.
+* **With `main.py`:** You can write 2 lines of code showing how to seed `session.state = {"user_name": "Sarah", "account_tier": "VIP"}` at session creation. Then, when the user types `"Hello"`, the agent immediately responds using Sarah's name and status. This provides a clear "aha!" moment for learners.
+
+---
+
+### 3. It Prepares Them for Production & Future Modules (Multi-Agent)
+
+No production application (FastAPI server, Cloud Run service, Slack bot) uses `adk run` in production.
+
+* **With `adk run`:** Students walk away knowing how to play with a local terminal CLI.
+* **With `main.py`:** Students walk away with production-ready boilerplate code. They see how to catch streamed `Event` objects (`async for event in runner.run_async(...)`), extract tool logs, and handle turns programmatically. Crucially, this sets them up for your upcoming **Multi-Agent** module, where custom Runners and sub-agent state passing require understanding programmatic execution.
+
+---
+
+### 4. It Makes the Event Stream & State Persistence "Inspectable"
+
+Understanding ADK state requires understanding **Events** (the immutable chat log) vs. **State** (the mutable key-value scratchpad).
+
+* **With `main.py`:** You can add print statements directly between turn 1 and turn 2:
+```python
+# Turn 1
+await runner.run_async(session_id="session_1", input="I live in Tokyo")
+
+# Inspect memory directly in code!
+current_session = await session_service.get_session("session_1")
+print("PERSISTED STATE:", current_session.state)
+
+```
+
+
+Seeing the output printed directly in the terminal log makes the concept concrete and removes all guesswork.
+
+---
+
+## Suggested Narrative Script for Your Tutorial
+
+> *"Up until now, we’ve been using `adk run` to test our agent prompts. But `adk run` is just a CLI wrapper—it hides how ADK actually manages memory. In this episode, we are 'taking off the training wheels' and writing a `main.py` script. You'll see the exact 3 objects that power ADK state behind the scenes: the `SessionService`, the `Session`, and the `Runner`. Understanding this code is what separates someone who just uses the ADK CLI from someone who can build and deploy production AI agents."*
+
+
+===========================================
+
+I was reviewing Lesson 06-Sessions and State critically and here is my honest feedback and suggestions
+
+Feedback:
+- While the lesson is about Sessions & State, it seems to focus more on tool_context.session rather than and Agent using sessions. The focus should be split equally between Agent using session - where you set certain session variables, and make the agent read/write them. The tool_context.session() example looks ok, but it's lacking a serios example of an Agent using & modifying Sessions & state.
+- I know we discussed this before & had agreed to an alternate path, but I'm going to revisit it. I honestly believe that we should NOT run an Agent using Session & state via adk web or adk run. Here is why:
+
+Using `main.py` takes off the framework's "training wheels" to teach software architecture rather than just CLI usage. While `adk run` hides state management behind magic prompt interpolation, a `main.py` script explicitly exposes ADK 2.x’s core architecture—the `SessionService`, `Session`, and `Runner`. This approach makes state tangible: learners can directly inspect `session.state`, practice pre-populating user data programmatically, and write production-ready async event loops. Ultimately, mastering programmatic execution in `main.py` is what transforms a developer from someone testing prompts in a CLI into an engineer capable of building deployable, production-grade agent backends.
+- I also think that introducing these concepts along with multi-agent systems will overcomplicate those lessons.This way the reader is already prepared.
+
+So we need to revisit the approach. Let's do this:
+- Split Lesson 6 into 2 lessons 6a & 6b
+- Lesson 6a focuses on the Agent using & modifying Session state
+- It should start with an explanation of the key components of ADK 2.0 - 'SessionService', 'Session' and 'Runner' and explain how the adk run/adk web harness hid this from us so far, but we are now going to take the covers off. Maybe start lesson with something like:
+"Up until now, we’ve been using adk run to test our agent prompts. But adk run is just a CLI wrapper—it hides how ADK actually manages memory. In this episode, we are 'taking off the training wheels' and writing a main.py script. You'll see the exact 3 objects that power ADK state behind the scenes: the SessionService, the Session, and the Runner. Understanding this code is what separates someone who just uses the ADK CLI from someone who can build and deploy production AI agents."
+
+And then explain SessionState (InMemorySessionState & DatabaseSessionState), Session & Runner in detail.
+- Then introduce the problem we'll be solving (you may need to think up a new problem where you can explicitly initialize a Session, pass it to an agent and have the agent read & modify it)
+- Then code up our Session Service & Runner objects and manually take prompts from console & pass it to our Agent & display teh agents response.
+- End the chapter with a brief segue into tool_context.session and how tools can also use sessions
+
+Lesson 6b: here you should focus on tool_context.session object - your KYC example first here perfectly.
+
+if we take this approach, we may have to drop Lesson 07a - Production servicing entirely, but keep just 07b - Anatomy of an Agent (which we could rename as 07a - Anatomy of an agent). You may also have to modify the code in Lesson 07-Long Term Memory to also use the main.py approach.
+
+Can we take this approach and make the modifications? Challenge me if this does not convince you and tell me why exactly. If you are convinced, then let's start with Lesson 06a, unless you need any clarifications first.
