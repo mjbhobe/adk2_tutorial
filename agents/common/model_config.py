@@ -17,9 +17,9 @@ import yaml
 from google.adk.models.anthropic_llm import AnthropicLlm
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-print(f"Project root: {_PROJECT_ROOT}")
+# print(f"[model_config.py log] -> Project root: {_PROJECT_ROOT}")
 _MODELS_CONFIG_PATH = _PROJECT_ROOT / "config" / "models.yaml"
-print(f"Models config path: {_MODELS_CONFIG_PATH}")
+# print(f"[model_config.py log] -> Models config path: {_MODELS_CONFIG_PATH}")
 
 ModelTier = Literal["primary", "escalation", "fallback"]
 
@@ -45,13 +45,13 @@ def get_model(tier: ModelTier = "primary"):
     provider = entry["provider"]
     model_id = entry["id"]
 
-    print(f"Retrieving model for tier '{tier}': {provider} - {model_id}")
+    # print(f"[model_config.py log] -> Retrieving model for tier '{tier}': {provider} - {model_id}")
 
     if provider == "anthropic":
-        print(f"get_model() will return -> AnthropicLlm({model_id})")
+        # print(f"[model_config.py log] -> get_model() will return -> AnthropicLlm({model_id})")
         return AnthropicLlm(model=model_id)
     if provider == "google":
-        print(f"get_model() will return -> {model_id} [google]")
+        # print(f"[model_config.py log] -> get_model() will return -> {model_id} [google]")
         return model_id
 
     raise ValueError(f"Unknown model provider '{provider}' for tier '{tier}'")
