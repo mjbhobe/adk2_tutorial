@@ -1,4 +1,4 @@
-# Lesson 6a: Sessions & State
+# Lesson 6a: Sessions & State - the Agent View
 
 Up until now, every lesson has run through `adk run` or `adk web`. Both are genuinely useful for quick testing, and we'll keep reaching for them elsewhere in this series. But they've also been quietly doing something you've never had to look at: managing exactly how a conversation's state is created, stored, and handed to your agent turn by turn. That convenience has a cost. It hides the very machinery this lesson is about.
 
@@ -17,6 +17,10 @@ That's a genuinely different shape of problem than anything so far in this serie
 **`Session`** is one specific conversation: its message history (the back-and-forth conversations) and its state (a dict object of key & value pairs), the same state you'll read and write in this lesson. A `SessionService` can hold many sessions at once, for many different users; a `Session` is exactly one of them.
 
 **`Runner`** is what actually executes one turn of a conversation. Hand it a session, an agent, and a new message, and it drives the full exchange: sending the conversation to the model, running any tool the model asks for, applying callbacks, and doing this as many times in a row as the model needs before it's ready to give a final answer. `adk run` and `adk web` have been building a `Runner` for you, invisibly, on every message you've ever sent them.
+
+The diagram below better illustrates the complex inter-relationship between these ADK classes:
+
+![ADK Sessions and State](images/ADK_Sessions_and_State_Class_Reln.png)
 
 **One more thing worth knowing before you see the code**
 
