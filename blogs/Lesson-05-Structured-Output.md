@@ -204,15 +204,40 @@ And this is what I see.
     <image src="images/credit_check3.png" alt="Credit Check 3- Claude"/>
 </div>
 
+## Taking it further: output_key
+
+There's one more parameter worth knowing before we leave this lesson: `output_key`. When you add `output_key="some_key"` to your `Agent` definition alongside `output_schema`, ADK automatically writes the validated structured output into the session's state dictionary under that key after every turn, without any extra code from you.
+
+Add it to the agent definition in `agent.py`:
+
+```python
+root_agent = Agent(
+    name="credit_risk_agent",
+    model=get_model("primary"),
+    instruction=AGENT_INSTRUCTION,
+    description=(
+        "Assesses retail loan applicant credit risk and returns a "
+        "structured, validated verdict for the underwriting desk."
+    ),
+    tools=[calculate_debt_to_income_ratio],
+    output_schema=CreditRiskAssessment,
+    output_key="latest_credit_assessment",   # ← new
+)
+```
+
+After each turn, `session.state["latest_credit_assessment"]` will contain the structured verdict as a dictionary. In practice, this means any other agent, tool, or callback later in your application can read the assessment result directly from state, without you wiring up any explicit data-passing between components. A multi-agent loan pipeline, for example, could have this underwriting agent run first, write its verdict to state via `output_key`, and a subsequent approval agent read it from `session.state["latest_credit_assessment"]` without the two agents ever knowing about each other's internals.
+
+> 📌**NOTE:** You won't be able to observe `output_key` in action through `adk web` in this lesson, since we haven't introduced the `Runner` and `SessionService` objects that give you direct access to session state yet. Lesson 6a covers those in detail. Once you reach Lesson 6a, you can come back to this agent, add `output_key` as shown above, and verify it with a line like `print(updated_session.state.get("latest_credit_assessment"))` in your `main.py` loop. We mention it here because it belongs conceptually with `output_schema`, its natural companion.
 
 ## If you're coming from LangChain or LangGraph
 
-This maps directly to LangChain's `with_structured_output()`, which also takes a Pydantic model and constrains a model's response to match it. The underlying idea, define your schema once as a Pydantic class and let the framework handle getting the model to conform to it, is identical across both frameworks. Where ADK's version stands out a bit is exactly the caveat from earlier in this lesson: combining a schema with active tool use in the same agent used to be more awkward to coordinate by hand, and here it's a native, built-in combination you get by setting two parameters.
+This maps directly to LangChain's `with_structured_output()`, which also takes a Pydantic model and constrains a model's response to match it. The underlying idea, define your schema once as a Pydantic class and let the framework handle getting the model to conform to it, is identical across both frameworks. Where ADK's version stands out a bit is exactly the caveat from earlier in this lesson: combining a schema with active tool use in the same agent used to be more awkward to coordinate by hand, and here it's a native, built-in combination you get by setting two parameters. The `output_key` parameter has a rough equivalent in LangGraph too: storing a node's structured output directly into the shared graph state dictionary so downstream nodes can consume it without explicit wiring. ADK's `output_key` does the same thing automatically, without you having to define the state field in a graph schema first.
 
 ## In this lesson
 
-We moved an agent's output from free-form text to a validated, fixed-shape result. The underwriting agent still calls a real tool to ground its numbers, exactly as in Lesson 3, but now its final answer is a `CreditRiskAssessment` object with a guaranteed set of fields and types, not a paragraph someone has to interpret or re-key by hand. That's what makes an agent's output usable by the rest of a real system, rather than only usable by a person reading a chat window.
+We moved an agent's output from free-form text to a validated, fixed-shape result. The underwriting agent still calls a real tool to ground its numbers, exactly as in Lesson 3, but now its final answer is a `CreditRiskAssessment` object with a guaranteed set of fields and types, not a paragraph someone has to interpret or re-key by hand. We also added `output_key`, which writes that validated result directly into session state after every turn, making it available to any other component in the system without explicit data-passing. That combination, a guaranteed shape plus automatic state persistence, is what makes an agent's output truly usable by the rest of a real system, rather than only usable by a person reading a chat window.
 
 ## In the next lesson
 
-Lesson 6 picks up something every example so far has been missing: memory within a conversation. Every agent we've built forgets everything the moment a new message arrives, unless the conversation happens to still be in the same chat window. We'll build a multi-turn KYC (Know Your Customer) onboarding agent that actually remembers what it's already collected from a customer as the conversation continues, using ADK's session and state management.
+Lesson 6a takes off the training wheels that `adk run` and `adk web` have been providing. We'll build the `SessionService`, `Session`, and `Runner` objects by hand in a `main.py` script, and see exactly what ADK has been doing behind the scenes across every lesson so far.
+
