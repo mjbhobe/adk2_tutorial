@@ -179,3 +179,13 @@ Lesson 6b: here you should focus on tool_context.session object - your KYC examp
 if we take this approach, we may have to drop Lesson 07a - Production servicing entirely, but keep just 07b - Anatomy of an Agent (which we could rename as 07a - Anatomy of an agent). You may also have to modify the code in Lesson 07-Long Term Memory to also use the main.py approach.
 
 Can we take this approach and make the modifications? Challenge me if this does not convince you and tell me why exactly. If you are convinced, then let's start with Lesson 06a, unless you need any clarifications first.
+
+================================================
+Ok, we have covered a lot of ground so far. Before you run out of context memory, I'd like you to do the following:
+- I am attaching all the lessons we created so far - I made offline edits to the ones you generated, but kept the file numbering sequence (may not have kept the same name!). From these lessons, please summarize what we have done so far.
+- Throughtout our conversation so far, I periodically gave you some additional directions, such as on how to group the code listings etc. From the conversation history pick up all the instructions I have given you so far.
+- Generate a summary from the conversation history + lessons attached + all the instruction. My intention is to now start a new chat, and give you this summary as the initial context. Continue our lessons from there in the new chat as though we are continuing in this thread chat itself. Please ensure that the instructions I gave you periodically are not missed.
+
+Please go ahead and summarize the conversation now.
+
+
