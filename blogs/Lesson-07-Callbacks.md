@@ -2,47 +2,56 @@
 
 Lessons 6a and 6b gave you two ways to touch session state: pre-seeding it from `main.py` before the conversation starts, and writing to it from inside a tool during a turn. Both of those are tied to specific, explicit moments, the application choosing to pre-load something, or the model choosing to call a tool. But some behaviour in a real agent system doesn't belong to any one of those moments. You might want to log every single model call, regardless of which tool it ends up calling. You might want to reject a request before it ever reaches the model, if it fails a compliance check. You might want to scan every tool result for sensitive data before the model reads it. None of those fit neatly inside a tool or a session pre-load. That's what _callbacks_ exist for.
 
-This is a theory-only lesson. No new code to run. The goal is to give you a clear mental model of the six callback types, what fires when, what each one can do, and when you should reach for each one, before Lesson 7a builds a real application that puts all of them to work together.
+> 📌 **NOTE: This is a theory-only lesson.** 
+>
+> For a change, there is no code to run. The goal is to give you a clear mental model of the six callback types, what fires when, what each one can do, and when you should reach for each one, before Lesson 7a builds a real application that puts all of them to work together.
 
-## What a callback actually is
+## What _is_ a Callback actually?
 
-A callback in ADK is a plain Python function, `async` or sync, that ADK invokes automatically at a specific point in the processing of a turn. You write it yourself, register it on an agent by name (like `before_agent_callback=my_function`), and ADK calls it for you at the right moment, every single turn, without you having to trigger it manually.
+A callback in ADK is a plain Python function, `async` or sync, that the ADK invokes automatically at a specific point in the processing of a turn. You write it yourself, register it on an agent by name (like `before_agent_callback=my_function`), and ADK calls it for you at the right moment, every single turn, without you having to trigger it manually.
 
-The function receives a context object that gives it access to the current session, its state, and other details about what's happening right now. Depending on which callback point you're at, the context might also carry the model's request, the model's response, or a tool's result, things you can inspect, modify, or replace. And depending on what you return from the callback, you can either let the normal processing continue (return `None`) or short-circuit it entirely (return an actual value, which ADK will use as the result for that step, skipping whatever would have happened next).
+The function receives a context object that gives it access to the current session, its state, and other details about what's happening right now. Depending on which callback point you're at, the context might also carry the model's request, the model's response, or a tool's result, things you can inspect, modify, or replace. And depending on what you return from the callback, you can either let the normal processing continue (return `None`) or short-circuit it entirely (return an actual value, which ADK will use as the result for that step, skipping whatever would have otherwise happened next).
 
-That last point, the ability to short-circuit, is what gives callbacks their real power. A before-model callback that returns a response object stops the model call from happening at all and uses your response instead. A before-tool callback that returns a dict stops the tool from executing and uses your dict as the result. This is how you build guardrails, caching, rate limiting, and mock responses, all without touching the agent's core logic.
+That last point, the ability to short-circuit, is what gives callbacks their real power. For instance, a _before-model_ callback that returns a response object stops the model call from happening at all and uses your response instead. Similarly, a before-tool callback that returns a dict stops the tool from executing and uses your dict as the result (of the intended tool call). This is how you'd build guardrails, caching, rate limiting, and mock responses, all without touching the agent's core logic.
 
 ## The six callback points
 
-Every turn of a conversation passes through up to six potential callback interception points, in this order:
+Yeah! There are 6 of them. Every turn of a conversation passes through up to six potential callback interception points, in this order:
 
 ```
 Before Agent
-    └── Before Model
-            └── [Model call]
-        After Model
-            └── Before Tool (once per tool call, if any)
+    └── Before Model          ← fires once per model call
+            └── [Model call]  ← returns tool requests OR final answer
+        After Model           ← fires once per model call
+            └── Before Tool   ← fires once per tool call, if any
                     └── [Tool execution]
-                After Tool (once per tool call, if any)
-            (Model called again if tools were used...)
+                After Tool    ← fires once per tool call, if any
+    └── (loop back to Before Model if tools were called...)
+    └── Before Model          ← fires again with tool results in context
+            └── [Model call]  ← now produces the final answer
+        After Model           ← fires again
 After Agent
 ```
+
+Three of these six callbacks can fire more than once in a single turn. `before_model_callback` and `after_model_callback` each fire once per model call, and as the diagram shows, a turn involving tools requires at least two model calls: one to get the tool requests, and one to produce the final answer after the tool results come back. Similarly, `before_tool_callback` and `after_tool_callback` fire once per tool execution, so if the model calls two tools in one turn, each fires twice. Only `before_agent_callback` and `after_agent_callback` fire exactly once per turn, at the very start and very end respectively.
+
 
 This image illustrates the process more clearly
 
 ![ADK Callbacks](images/ADK%20Callbacks.png)
 
-Tools may fire multiple times in a single turn if the model decides to call several tools before giving its final answer, so `before_tool_callback` and `after_tool_callback` can each fire more than once per turn. Everything else fires once per turn.
-
-Let's look at each one precisely.
+Let's look at each callback precisely.
 
 ## Before Agent callback
 
 **When it fires:** at the very start of every turn, before anything else happens, before the model is called, before any tool runs.
 
 **Signature:**
+
 ```python
-async def my_callback(callback_context: CallbackContext) -> Optional[types.Content]:
+async def my_callback(
+    callback_context: CallbackContext,
+) -> Optional[types.Content]:
 ```
 
 **What it can do:** read and write `callback_context.state`, inspect `callback_context.user_content` (the incoming message), and access `callback_context.session`, `user_id`, `agent_name`.
@@ -50,6 +59,7 @@ async def my_callback(callback_context: CallbackContext) -> Optional[types.Conte
 **What returning a value means:** if you return a `types.Content` object, ADK uses that as the agent's final response for this turn and skips everything else: no model call, no tools. If you return `None`, the turn proceeds normally.
 
 **What to use it for:**
+
 - **Access control and compliance pre-checks.** If a customer's tier doesn't allow a certain operation, reject it here with a friendly response, before the model ever sees the message. This is cheaper than letting the model process a request you're going to block anyway.
 - **Session bookkeeping that applies every turn.** Incrementing a turn counter, logging a conversation event, setting a timestamp for the start of this turn. Things that should happen regardless of what the customer said.
 - **Input validation or redirection.** Detect that a message is clearly off-topic and return a standard response directly, rather than burning model tokens on it.
@@ -58,11 +68,15 @@ async def my_callback(callback_context: CallbackContext) -> Optional[types.Conte
 
 ## Before Model callback
 
-**When it fires:** immediately before each call to the LLM. In a turn where the model calls several tools and then produces a final answer, this fires once before the very first model call only; subsequent model calls (after tool results come back) are not intercepted again by this callback in the current implementation.
+**When it fires:** immediately before each call to the LLM. This is more than once per turn when tools are involved. A turn where the model calls multiple tools actually involves at least two model calls: the first one to decide which tools to use and request them, and the second (after all the called tool(s) results come back) to read those results and produce the final answer. `before_model_callback` fires before every one of those model calls, so in your example of a turn that calls two tools, it fires at least twice. If the model requests its two tools in separate steps rather than simultaneously, it fires three times. You can tell which model call you're in by inspecting the `llm_request.contents` to see whether it already contains tool results from a previous step.
 
 **Signature:**
+
 ```python
-async def my_callback(callback_context: CallbackContext, llm_request: LlmRequest) -> Optional[LlmResponse]:
+async def my_callback(
+    callback_context: CallbackContext, 
+    llm_request: LlmRequest,
+) -> Optional[LlmResponse]:
 ```
 
 **What it can do:** everything `before_agent_callback` can do, plus it receives the `LlmRequest` object directly. `LlmRequest` is the fully assembled package about to be sent to the model: the system prompt, the conversation history, the tool schemas, any media. You can read it and mutate it in place, adding context, modifying the system prompt, injecting additional instructions without touching the agent's stored instruction string.
@@ -70,6 +84,7 @@ async def my_callback(callback_context: CallbackContext, llm_request: LlmRequest
 **What returning a value means:** if you return an `LlmResponse`, that response is used as the model's output for this turn and the actual model call is skipped entirely. If you return `None`, the (possibly mutated) request is sent to the model as normal.
 
 **What to use it for:**
+
 - **Dynamic context injection.** Fetch a live interest rate, a customer's account balance, or a real-time market price and inject it directly into the prompt right before the model call, so the model always has up-to-date information without that data needing to be baked into the agent's static instruction.
 - **Prompt guards.** Scan the assembled request for terms or patterns your compliance team has flagged, and either block the call or add a compliance reminder before it goes out.
 - **Response caching.** Check a cache for a prior response to this exact request; if you have one, return it directly and skip the model call entirely, saving both latency and cost.
@@ -79,11 +94,15 @@ async def my_callback(callback_context: CallbackContext, llm_request: LlmRequest
 
 ## After Model callback
 
-**When it fires:** immediately after the LLM responds, before ADK processes that response (before any tool calls the model requested are executed).
+**When it fires:** immediately after each LLM response, before ADK processes that response further. Like the `before_model_callback`, this fires once per model call, not once per turn. In a turn that calls multiple tools, both model callbacks fire at least twice: once after the model returns its initial tool call requests, and once after it produces its final answer. This means an `after_model_callback` will sometimes receive a response containing tool call requests (not a final answer) rather than the text it was expecting, and it should handle both cases gracefully. You can distinguish them by checking whether the response contains function calls.
 
 **Signature:**
+
 ```python
-async def my_callback(callback_context: CallbackContext, llm_response: LlmResponse) -> Optional[LlmResponse]:
+async def my_callback(
+    callback_context: CallbackContext, 
+    llm_response: LlmResponse,
+) -> Optional[LlmResponse]:
 ```
 
 **What it can do:** everything the before callbacks can do, plus it receives the actual `LlmResponse`. You can inspect the model's text output, the tool calls it's requesting, or any other content in the response.
@@ -91,6 +110,7 @@ async def my_callback(callback_context: CallbackContext, llm_response: LlmRespon
 **What returning a value means:** if you return an `LlmResponse`, that replaces the model's actual response for everything that comes after (tool execution, final answer). If you return `None`, the real response proceeds.
 
 **What to use it for:**
+
 - **Content filtering.** Scan the model's output for prohibited terms, investment advice language, personally identifiable information, or other content your compliance rules prohibit. You can modify or replace the response here before any user or downstream system sees it.
 - **Response enrichment.** Add standard disclaimers, legal notices, or structured metadata to the model's output without baking that text permanently into the instruction string.
 - **Output monitoring.** Log the model's raw response for quality evaluation or fine-tuning data collection, before any subsequent processing changes it.
@@ -99,18 +119,24 @@ async def my_callback(callback_context: CallbackContext, llm_response: LlmRespon
 
 ## Before Tool callback
 
-**When it fires:** immediately before each individual tool execution. If the model requested three tool calls in one turn, this fires three times, once before each one.
+**When it fires:** immediately _before each individual tool execution_. If the model requested three tool calls in one turn, this fires three times, once before each one.
 
 **Signature:**
+
 ```python
-async def my_callback(tool: BaseTool, args: dict, tool_context: ToolContext) -> Optional[dict]:
+async def my_callback(
+    tool: BaseTool, 
+    args: dict, 
+    tool_context: ToolContext,
+) -> Optional[dict]:
 ```
 
 **What it can do:** inspect the tool being called (`tool.name`), the exact arguments ADK is about to pass to it (`args`), and read/write session state through `tool_context.state`.
 
-**What returning a value means:** if you return a dict, ADK uses that as the tool's result and skips the actual tool execution. If you return `None`, the tool runs as normal.
+**What returning a value means:** if you return a `dict`, ADK uses that as the tool's result and skips the actual tool execution. If you return `None`, the tool runs as normal.
 
 **What to use it for:**
+
 - **Argument validation.** Check that the arguments the model is passing to a tool make sense before the tool runs. If a loan amount is negative or a ticker symbol is blank, reject it here with a structured error dict rather than letting it propagate into the tool's own error handling.
 - **Tool-call logging and auditing.** Record every tool invocation with its arguments, essential for a regulated environment where you need to explain exactly what your agent did and why.
 - **Mocking for testing.** In a test environment, intercept calls to external tools (an API, a database) and return canned responses instead. This keeps tests fast and deterministic.
@@ -120,11 +146,17 @@ async def my_callback(tool: BaseTool, args: dict, tool_context: ToolContext) -> 
 
 ## After Tool callback
 
-**When it fires:** immediately after each tool execution completes, before the result is returned to the model. Like `before_tool_callback`, this fires once per tool call, potentially multiple times per turn.
+**When it fires:** immediately _after each tool execution completes_, before the result is returned to the model. Like `before_tool_callback`, this fires once per tool call, potentially multiple times per turn.
 
 **Signature:**
+
 ```python
-async def my_callback(tool: BaseTool, args: dict, tool_context: ToolContext, tool_response: dict) -> Optional[dict]:
+async def my_callback(
+    tool: BaseTool, 
+    args: dict, 
+    tool_context: ToolContext, 
+    tool_response: dict,
+) -> Optional[dict]:
 ```
 
 **What it can do:** everything `before_tool_callback` can do, plus it receives the actual `tool_response`, the dict your tool returned. You can inspect or modify it.
@@ -132,6 +164,7 @@ async def my_callback(tool: BaseTool, args: dict, tool_context: ToolContext, too
 **What returning a value means:** if you return a dict, that replaces the tool's actual response as what the model sees. If you return `None`, the real response is passed to the model.
 
 **What to use it for:**
+
 - **Sensitive data redaction.** Scrub PII or account numbers from a tool's response before the model reads it and potentially echoes it back to the user in its reply.
 - **Result validation.** Check that a tool's return value makes sense before the model acts on it. A stock price tool that returns a negative number, or a credit score tool that returns a value outside the expected range, can be caught and replaced with an error signal here.
 - **Result enrichment.** Add metadata, provenance information, or a timestamp to a tool's raw result before the model sees it, so the model can reference it accurately in its answer.
@@ -142,8 +175,11 @@ async def my_callback(tool: BaseTool, args: dict, tool_context: ToolContext, too
 **When it fires:** at the very end of every turn, after the model has produced its final answer, after all tools have run, after everything else has completed.
 
 **Signature:**
+
 ```python
-async def my_callback(callback_context: CallbackContext) -> Optional[types.Content]:
+async def my_callback(
+    callback_context: CallbackContext,
+) -> Optional[types.Content]:
 ```
 
 **What it can do:** the same as `before_agent_callback`: read/write state, access session and user details. Crucially, it also has access to `callback_context.add_session_to_memory()`, which is how you trigger long-term memory saving.
@@ -151,6 +187,7 @@ async def my_callback(callback_context: CallbackContext) -> Optional[types.Conte
 **What returning a value means:** if you return `types.Content`, that replaces the agent's final response as what gets surfaced to the caller. If you return `None`, the real final response is used.
 
 **What to use it for:**
+
 - **Saving to long-term memory.** This is the primary use of `after_agent_callback` in this series. Calling `await callback_context.add_session_to_memory()` here ensures that whatever was said in this turn gets stored for potential recall in future sessions, covering Lesson 8 (Memory) naturally.
 - **Turn-completion logging.** Record that a turn completed, how long it took, whether it used tools, and what the final answer was.
 - **Post-response state updates.** Write any bookkeeping that should happen at turn completion, like updating a "last active" timestamp or marking a workflow step as done.
