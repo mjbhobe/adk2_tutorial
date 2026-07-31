@@ -227,7 +227,7 @@ The `/chat` endpoint is deliberately thin: parse the request, call `run_agent_qu
 
 Here's the full architecture of what we're building. The diagram is included as `production-serving-architecture.png` in the lesson assets — place it in the same folder as this markdown file.
 
-![Diagram showing two client types — a Streamlit web UI and a console client — sending HTTP POST requests to a FastAPI server (main.py), which uses a Runner, shared SessionService and MemoryService to drive the relationship_manager_agent, which calls Claude Haiku via the Anthropic API.](./production-serving-architecture.png)
+![Diagram showing two client types — a Streamlit web UI and a console client — sending HTTP POST requests to a FastAPI server (main.py), which uses a Runner, shared SessionService and MemoryService to drive the relationship_manager_agent, which calls Claude Haiku via the Anthropic API.](images/production-serving-architecture.png)
 
 ## Step 4: Run the API server
 
