@@ -10,6 +10,7 @@ dependencies = [
     "google-adk[litellm]>=2.5.0",
     "python-dotenv>=1.2.2",
     "pyyaml>=6.0.3",
+    "reportlab>=5.0.0",
     "requests>=2.34.2",
     "streamlit>=1.60.0",
     "tavily-python>=0.7.26",
