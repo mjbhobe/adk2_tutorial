@@ -402,7 +402,31 @@ In a third terminal, with `main.py` still running:
 uv run agents/lesson09_production_serving/console_client.py
 ```
 
-This conversation starts with a fresh `user_id`, so it won't share memory with your Streamlit conversation. Each client here simulates a different end user talking to the same running agent.
+This conversation starts with a fresh `user_id`, so it won't share memory with your Streamlit conversation. Each client here simulates a different end user talking to the same running agent. So you'll have to enter a separate set of preferences & your follow up questions. 
+
+Try this for example:
+
+```
+I'm a 35-year-old IT professional based in Bangalore with a monthly surplus of 50,000 rupees to invest. I have a moderate risk appetite and a 7-year horizon. I want to build a retirement corpus and I'm open to both equity and debt, but I want to avoid sector-specific funds — I prefer diversified options only.
+```
+
+And these follow up questions:
+
+```
+What broad asset classes should I be looking at given my goal and timeline?
+```
+
+```
+How much of my monthly 50,000 should go into equity versus debt instruments?
+```
+
+```
+What are the tax implications I should keep in mind for a 7-year investment plan in India?
+```
+
+```
+What are the tax implications I should keep in mind for a 7-year investment plan in India?
+```
 
 ## If you're coming from LangChain or LangGraph
 
