@@ -25,11 +25,12 @@ An `Agent` in ADK is a declaration, not an executor. It describes the agent's id
 **`model`** decides which LLM answers. Gemini resolves from a plain string like `"gemini-flash-latest"`. Claude does not — a bare `"claude-*"` string routes to a Vertex AI-backed class that requires a GCP project. The fix used throughout this series: `AnthropicLlm(model="claude-haiku-4-5-20251001")`, which talks directly to Anthropic's API using your key.
 
 **`instruction`** is the system prompt. It's the single biggest lever over an agent's actual behaviour. It can be:
+
 - A static string: `"You are a loan officer assistant."`
 - A string with `{key}` placeholders: ADK substitutes the current session state value before every model call. A missing key raises a `KeyError`; add `?` (e.g. `{kyc_status?}`) to get an empty string instead.
 - A callable: a function that receives a `ReadonlyContext` and returns a string, letting you build the instruction programmatically from any combination of state, user ID, or runtime logic.
 
-**`description`** doesn't affect behaviour on a standalone agent. It becomes load-bearing in multi-agent systems, where a parent agent reads sub-agent descriptions to decide which one to delegate to.
+**`description`** doesn't affect behaviour on a standalone agent. As we'll see in upcoming lessons, **it becomes load-bearing in multi-agent systems**, where a parent agent reads sub-agent descriptions to decide which one to delegate to.
 
 **`output_schema`** constrains the agent's final response to match a Pydantic model. Every field, every type, guaranteed — no free text mixed in. Combine with `output_key="some_key"` and ADK also writes the validated result into session state automatically after every turn, making it available to any downstream component without explicit wiring.
 
