@@ -32,7 +32,7 @@ dependencies = [
 requires-dist = [
     { name = "anthropic", specifier = ">=0.117.1" },
     { name = "fastapi", specifier = ">=0.139.2" },
-    { name = "google-adk", extras = ["litellm"], specifier = ">=2.5.0" },
+    { name = "google-adk", specifier = "==2.5.0" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "reportlab", specifier = ">=5.0.0" },
