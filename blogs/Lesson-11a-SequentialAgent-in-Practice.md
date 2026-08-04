@@ -716,7 +716,7 @@ Paste in a loan application as plain text, something like:
 Application: Rohan Mehta wants a car loan of INR 800000 over 60 months to buy a new car. His PAN is ROHAN1234M and his annual income is INR 1200000.
 ```
 
-Watch the pipeline run through all four steps, intake, credit check, risk scoring, decision, and print the final structured result. With this particular applicant, you should see something close to: `loan_type` captured as `car`, PAN validated, a credit score around 773 with no prior defaults, an EMI-to-income ratio around 0.16, a risk score in the Low band, and an approved decision at 7.5%, the car loan base rate with no spread added, since Low risk pays exactly the base rate.
+The pipeline runs through all four steps, intake, credit check, risk scoring, decision, and print the final structured result. With this particular applicant, you should see something close to: `loan_type` captured as `car`, PAN validated, a credit score around 773 with no prior defaults, an EMI-to-income ratio around 0.16, a risk score in the Low band, and an approved decision at 7.5%, the car loan base rate with no spread added, since Low risk pays exactly the base rate.
 
 Now try a personal loan application for a less pristine applicant:
 
@@ -726,21 +726,264 @@ Application: Priya Nair needs a personal loan of INR 500000 over 36 months for m
 
 This one should land in the Medium risk band, credit score around 540, still no defaults, but a weaker score pulls the risk score down. The decision agent should still approve it, but at 13.0%, the personal loan base rate of 10.5% plus the 2.5-point Medium-risk spread. Comparing these two runs side by side is the point of this revision: same pipeline, same rules, but the loan type and the risk band together produce a genuinely different rate, not just a different pass/fail outcome.
 
-Try a third application with a much smaller income relative to the loan amount, or a fabricated PAN like `NOTAPAN123`, and watch the decision change. An invalid PAN should push `is_complete` to `False` at the intake step and come out the other end as `refer_to_underwriter`, without the pipeline ever reaching the credit check or risk scoring agents' actual banking logic in a meaningful way, since the whole point of a bad `is_complete` is that the decision agent short-circuits on it.
+To complete the picture, try a third application that should get rejected outright:
+
+```
+Application: Vikas Kumar wants a personal loan of INR 600000 over 24 months for a wedding. His PAN is VIKAS2345Q and his annual income is INR 480000.  
+```
+
+This applicant has a weak credit score around 449, a prior default on record, and an EMI that would eat up roughly 70% of his monthly income at the personal loan base rate. All three factors push the risk score down into the High band, and High risk isn't priced at all, `lookup_interest_rate` returns `eligible: False` before any rate gets considered. You should see `decision: "rejected"`, with interest_rate left empty and reasons pointing at the low credit score, the prior default, and the unaffordable EMI-to-income ratio. Between Rohan's approval at 7.5%, Priya's approval at 13.0%, and Vikas's outright rejection, you've now seen all three outcomes the decision agent can produce, and why each one happened.
+
+Try a fourth application with a fabricated PAN like `NOTAPAN123`, and watch the decision change again. An invalid PAN should push `is_complete` to `False` at the intake step and come out the other end as `refer_to_underwriter`, without the pipeline ever reaching the credit check or risk scoring agents' actual banking logic in a meaningful way, since the whole point of a bad is_complete is that the decision agent short-circuits on it.
 
 ## Try it in `adk web` too
 
-Everything above ran through `main.py`, and that's the right way to run this pipeline day to day, but there's a faster way to actually _watch_ `SequentialAgent` work through its four steps: `adk web`. Instead of pointing it at `loan_pipeline` directly, point it at the parent folder:
+Everything above ran through `main.py`, and that's the right way to run this pipeline day to day, but there's a faster way to actually _watch_ `SequentialAgent` work through its four steps: `adk web`. From the root folder (`adk2_tutorial`), run the following command:
 
 ```bash
-adk web agents/lesson11a_sequential_agent
+adk web agents
 ```
 
-`adk web` scans that directory for agent packages, each subfolder with an `agent.py` exposing a root_agent, and lists them in a dropdown in the browser UI. Select `loan_pipeline`, paste in the same kind of application text you used earlier, and send it. You'll see the run unfold as four distinct steps in the trace panel, intake, credit check, risk scoring, decision, each with its own tool call and structured output visible individually, in the order `SequentialAgent` ran them. It's a genuinely useful way to build intuition for what "sub-agents sharing one session" actually looks like turn by turn, something main.py's single printed response doesn't show you.
+`adk web` scans that directory recursively for agent packages, any folder with an `agent.py` in it, and lists them in a dropdown in the browser UI, named by their path relative to `agents/`. Look for `lesson11a_sequential_agent.loan_pipeline`, that's the pipeline itself. You'll also see four extra entries for the individual sub-agent folders, `lesson11a_sequential_agent.loan_pipeline.sub_agents.intake_agent` and one each for the other three, since ADK discovers any folder with an `agent.py`, not just the top-level one. **Ignore those**, _they're not meant to run standalone_.
+
+Select `lesson11a_sequential_agent.loan_pipeline`, paste in the same kind of application text you used earlier, and send it. You'll see the run unfold as four distinct steps in the trace panel, intake, credit check, risk scoring, decision, each with its own tool call and structured output visible individually, in the order SequentialAgent ran them. It's a genuinely useful way to build intuition for what "sub-agents sharing one session" actually looks like turn by turn, something main.py's single printed response doesn't show you.
 
 > 📌 **NOTE:** `adk web` is a development tool, meant for exactly this kind of inspection while you're building and debugging. **It's not how you'd run this pipeline in production**, that's what `main.py` (or, more realistically, the FastAPI serving pattern from Lesson 9) is for. Reach for `adk web` when you want to see what's happening inside a run, reach for main.py or a proper served endpoint when something else needs to actually call this pipeline.
+
+## Serving this behind an API and a Streamlit form
+
+Everything so far has run through `main.py` or `adk web`, both are development tools. A loan officer's desk, or a real banking portal, needs this pipeline behind an HTTP API, exactly the pattern Lesson 9 built for a single agent. It carries over here almost unchanged, `SequentialAgent` is still a `BaseAgent`, so `run_agent_query` doesn't need to know or care that four agents are running instead of one.
+
+### FastAPI, wrapping the pipeline
+
+Create `agents/lesson11a_sequential_agent/api.py`, following the same shape as Lesson 9's `main.py`: a shared `session_service` created once at module load time, and a thin endpoint that does nothing but parse the request, call `run_agent_query`, and shape the response.
+
+```python
+# agents/lesson11a_sequential_agent/api.py
+"""Lesson 11a: FastAPI server for the loan underwriting SequentialAgent.
+
+Wraps the same SequentialAgent pipeline main.py drives, this time behind
+an HTTP API any client can call, a Streamlit form, a bank's real customer
+portal, or anything else, without needing to know ADK exists underneath.
+
+session_service is created once at module load time and shared across
+every request, exactly as in Lesson 9's main.py. Creating a fresh one
+per request would wipe state before we ever got to read it back out.
+
+Run with:
+    uv run agents/lesson11a_sequential_agent/api.py
+"""
+
+import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # adds agents/ for common.*
+
+from fastapi import FastAPI
+from google.adk.sessions import InMemorySessionService
+
+from common.runner_utils import run_agent_query
+from loan_pipeline.agent import root_agent
+from loan_pipeline.sub_agents.intake_agent.agent import IntakeResult
+from loan_pipeline.sub_agents.credit_check_agent.agent import CreditCheckResult
+from loan_pipeline.sub_agents.risk_scoring_agent.agent import RiskScoringResult
+from loan_pipeline.sub_agents.decision_agent.agent import DecisionResult
+from pydantic import BaseModel
+
+APP_NAME = "lesson11a_sequential_agent"
+
+# Created once, shared across every HTTP request, same pattern as Lesson 9.
+session_service = InMemorySessionService()
+app = FastAPI(title="Loan Underwriting Pipeline API")
+
+
+class ApplicationRequest(BaseModel):
+    """The shape of an incoming request to /apply."""
+
+    user_id: str
+    session_id: str
+    application_text: str
+
+
+class ApplicationResponse(BaseModel):
+    """The shape of a response from /apply.
+
+    Returns all four sub-agents' results, not just the final decision.
+    SequentialAgent runs every step in order and can't skip any of them
+    conditionally, so all four are always populated in session state by
+    the time a run completes, and all four are worth showing the caller.
+    """
+
+    intake: IntakeResult
+    credit_check: CreditCheckResult
+    risk_scoring: RiskScoringResult
+    decision: DecisionResult
+
+
+@app.get("/health")
+async def health() -> dict:
+    """Simple liveness check, useful once this is deployed."""
+    return {"status": "ok"}
+
+
+@app.post("/apply", response_model=ApplicationResponse)
+async def apply(request: ApplicationRequest) -> ApplicationResponse:
+    """Runs one loan application through the full pipeline and returns every step's result."""
+    await run_agent_query(
+        agent=root_agent,
+        app_name=APP_NAME,
+        user_id=request.user_id,
+        session_id=request.session_id,
+        query=request.application_text,
+        session_service=session_service,
+    )
+
+    session = await session_service.get_session(
+        app_name=APP_NAME, user_id=request.user_id, session_id=request.session_id
+    )
+
+    return ApplicationResponse(
+        intake=session.state["intake_result"],
+        credit_check=session.state["credit_check_result"],
+        risk_scoring=session.state["risk_scoring_result"],
+        decision=session.state["decision_result"],
+    )
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="127.0.0.1", port=8080)
+```
+
+One thing is different from Lesson 9's `/chat` endpoint, and it's worth calling out why. `/chat` returned a single string, because a chat agent only has one thing worth returning, its reply. This pipeline produces four separate results, one per sub-agent, and all four are real, useful output, not just the last one. So `/apply` fetches the session back out after run_agent_query returns, and reads `intake_result`, `credit_check_result`, `risk_scoring_result`, and `decision_result` straight out of `session.state`, the same dict-shaped values from the same mechanism you saw throughout this lesson, now serialized back out over HTTP through `IntakeResult`, `CreditCheckResult`, `RiskScoringResult`, and `DecisionResult`, the exact Pydantic classes each agent already defined. Nothing new to validate against, they were already there.
+
+> 📌 **NOTE:** All four sub-agents always run, in order, every time. `SequentialAgent` has no way to skip a step conditionally, even when `intake_result.is_complete` is `False` and the eventual decision is going to be `refer_to_underwriter` regardless. 
 >
-> **One thing worth flagging:** this only works as written because `loan_pipeline/agent.py`'s `SequentialAgent` is still named `root_agent`, that's the one file adk web's discovery convention actually depends on.
+> The pipeline still calls the credit bureau and still scores the risk on whatever data it has, then the decision agent overrides at the very end. That's a real limitation of a fixed sequence, not a bug, and it's part of why ADK's newer graph-based Workflow primitive, mentioned earlier in this lesson, exists: conditional branching is exactly the kind of thing a fixed list of sub_agents can't express.
+
+## Create the streamlit front-end
+
+Lesson 9's Streamlit app was a chat interface, because the agent it wrapped was a conversation. This pipeline isn't a conversation, it's a form: a loan officer (or an applicant) has a fixed set of fields to provide, and there's no reason to make them type a sentence when a form does it better.
+
+Create `agents/lesson11a_sequential_agent/streamlit_app.py`:
+
+```python
+"""Lesson 11a: Streamlit front-end for the loan underwriting pipeline.
+
+Collects the application as separate form fields, matching what a real
+loan officer's intake screen would look like, then assembles them into
+one sentence and sends that to the API's /apply endpoint. The intake
+agent still does its job unchanged: extracting fields and validating
+the PAN. This form just gives the applicant a friendlier way to provide
+that same information than typing free text.
+
+Run this alongside api.py in a separate terminal, not instead of it.
+
+Run with:
+    streamlit run agents/lesson11a_sequential_agent/streamlit_app.py
+"""
+
+import uuid
+
+import requests
+import streamlit as st
+
+API_URL = "http://127.0.0.1:8080/apply"
+
+st.set_page_config(page_title="Loan Application", page_icon="🏦")
+st.title("Loan Application")
+st.caption(
+    "A dummy front-end standing in for a real loan origination screen. "
+    "It knows nothing about ADK; it only talks to our pipeline's API."
+)
+
+if "user_id" not in st.session_state:
+    st.session_state.user_id = f"streamlit-user-{uuid.uuid4().hex[:8]}"
+
+with st.form("loan_application"):
+    applicant_name = st.text_input("Full name")
+    pan_number = st.text_input("PAN")
+    loan_type = st.selectbox("Loan type", ["home", "car", "personal"])
+    loan_amount = st.number_input("Loan amount (INR)", min_value=1.0, step=10000.0)
+    tenure_months = st.number_input("Tenure (months)", min_value=1, step=1)
+    annual_income = st.number_input("Annual income (INR)", min_value=1.0, step=10000.0)
+    purpose = st.text_input("Purpose of the loan")
+    submitted = st.form_submit_button("Submit application")
+
+if submitted:
+    # The intake agent still expects free text, so we assemble the form
+    # fields into a sentence rather than changing the pipeline's contract.
+    application_text = (
+        f"{applicant_name} wants a {loan_type} loan of INR {loan_amount:.0f} "
+        f"over {int(tenure_months)} months for {purpose}. "
+        f"PAN is {pan_number} and annual income is INR {annual_income:.0f}."
+    )
+
+    with st.spinner("Running the pipeline..."):
+        response = requests.post(
+            API_URL,
+            json={
+                "user_id": st.session_state.user_id,
+                "session_id": f"session-{uuid.uuid4().hex[:8]}",
+                "application_text": application_text,
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+        result = response.json()
+
+    decision = result["decision"]
+    if decision["decision"] == "approved":
+        st.success(f"Approved at {decision['interest_rate']}% p.a.")
+    elif decision["decision"] == "rejected":
+        st.error("Rejected")
+    else:
+        st.warning("Referred to a human underwriter")
+
+    st.write("Reasons:")
+    for reason in decision["reasons"]:
+        st.write(f"- {reason}")
+
+    with st.expander("See every step's result"):
+        st.json(result)
+```
+
+The interesting design decision here isn't in the Streamlit code, it's in what happens to the form fields before they're sent. Rather than inventing a new structured request shape and changing what the pipeline accepts, the form assembles `applicant_name`, `loan_type`, `loan_amount`, and the rest into one sentence, the exact shape of input the intake agent already expects, and sends that as `application_text`. The intake agent still runs, still extracts fields, still validates the PAN, exactly as it did with hand-typed text in every earlier run. The form only changes how the human provides the information, not what the pipeline does with it. A friendlier front end and an unmodified pipeline, at the same time. 
+
+### Run the streamlit front-end
+
+First startup the api front-end. Run fillowing command from the root folder (`adk2_projects`) in a separate terminal
+
+```bash
+uv run agents/lesson11a_sequential_agent/api.py
+```
+
+The from a separate terminal, run the following command from project root:
+
+```bash
+streamlit run agents/lesson11a_sequential_agent/streamlit_app.py
+```
+
+Fire up your browser and point it to `http://localhost:8501/` and you should see the loan application streamlit front-end.
+
+Try out the above test cases listed above (split components into respective fields) - for example, here's how I'd enter the "Rohan Mehta" test-case above.
+
+![Sequential Agent Streamlit Data Entry](images/sequential_agent_streamlit1.png)
+
+And after clicking the `Submit application` button, we see something like this:
+
+![Sequential Agent Streamlit App Decision](images/sequential_agent_streamlit2.png)
+
+Expanding the "See every step's result" will reveal the entire session variables like this:
+
+![Sequential Agent Streamlit App Session](images/sequential_agent_streamlit3.png)
+
+Now you have seen one test-case in action. Try out the others similarly, including an invalid PAN and see how it behaves.
 
 ## If you're coming from LangChain or LangGraph
 
