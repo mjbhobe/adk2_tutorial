@@ -6,20 +6,22 @@ You'll also see the same agent answer using two different models, Claude Haiku a
 
 ## Step 1: Create the agent folder
 
-Every ADK agent lives in its own folder with a specific, small structure: an `agent.py` file that defines and exports a `root_agent`, and an `__init__.py` that imports it so ADK can find it. From your project root:
+Every ADK agent lives in its own folder with a specific, small structure: an `agent.py` file that defines and exports a `root_agent`, and an `__init__.py` that imports it so ADK can find it.
+
+Open the project root folder (`adk2_tutorial`) in a terminal and run the following command:
 
 ```bash
 mkdir -p agents/lesson02_first_agent
 ```
 
-You don't need a separate `.env` file inside this folder. ADK automatically looks upward from an agent's folder for a `.env` file, so the one you created at `adk-bfsi-lab/.env` back in Lesson 1 already covers every agent folder we'll create in this series.
+You don't need a separate `.env` file inside this folder. ADK automatically looks upward from an agent's folder for a `.env` file, so the one you created at `adk2_tutorial/.env` back in Lesson 1 already covers every agent folder we'll create in this series.
 
 ## Step 2: Write the agent
 
 Create `agents/lesson02_first_agent/agent.py`:
 
 ```python
-"""BFSI Lesson 2: Your First Agent.
+"""Lesson 2: Your First Agent.
 
 A minimal agent that answers general banking terminology questions for
 a retail bank's customer support desk.
@@ -67,19 +69,19 @@ Create `agents/lesson02_first_agent/__init__.py`:
 from . import agent
 ```
 
-That's the whole agent. Three real pieces: a model, an instruction, and a name. Everything else, the conversation loop, calling the LLM API, managing the exchange, is ADK's job, not yours.
+That's the whole agent. Three real pieces: a `model`, an `instruction`, and a `name`. Everything else, the conversation loop, calling the LLM API, managing the exchange, is ADK's job, not yours.
 
 ## What each parameter in `Agent(...)` actually does
 
 Before we move on, it's worth knowing what each of these four arguments controls, since you'll use all of them in every agent you build for the rest of this series.
 
-- **`name`** — a unique identifier for this agent, and it's mandatory. ADK enforces two rules on it: it must be a valid Python identifier (letters, digits, underscores, no spaces or hyphens, can't start with a digit), and it can't be the literal string `"user"`, since ADK reserves that for the end user's own input. Once you start building multi-agent systems from Lesson 8 onward, this name is also how one agent refers to another, so it's worth naming agents descriptively from the start, the way we did with `bfsi_support_desk_agent`.
+- **`name`** (mandatory) — a unique identifier for this agent. ADK enforces two rules on it: it must be a valid Python identifier (letters, digits, underscores, no spaces or hyphens, can't start with a digit), and it **can't be the literal string `"user"`**, since ADK reserves that for the end user's own input. Once you start building multi-agent systems, this name is also how one agent refers to another, so it's worth naming agents descriptively from the start, the way we did with `bfsi_support_desk_agent`.
 
-- **`model`** — which LLM answers on this agent's behalf, either a plain string (for models ADK resolves natively, like Gemini) or a model object you construct yourself (as we just did for Claude, with `AnthropicLlm(...)`). This is the one parameter you'll see change the most across the series as we swap between Haiku, Sonnet, and Gemini Flash depending on the lesson.
+- **`model`** (mandatory) — which LLM answers on this agent's behalf, either a plain string (for models ADK resolves natively, like Gemini) or a model object you construct yourself (as we just did for Claude, with `AnthropicLlm(...)`). This is the one parameter you'll see change the most across the series as we swap between Haiku, Sonnet, and Gemini Flash depending on the lesson.
 
-- **`instruction`** — the system prompt: your agent's standing directions for how to behave, what tone to use, and what it should and shouldn't do. This is the single biggest lever you have over an agent's behavior, and it's worth spending real time on. Later in the series, once we cover sessions and state (Lesson 6), you'll see this field can also contain placeholders like `{customer_name}` that get filled in from live conversation data, rather than being fixed text like it is here.
+- **`instruction`** (mandatory) — the system prompt: your agent's standing directions for how to behave, what tone to use, and what it should and shouldn't do. This is the single biggest lever you have over an agent's behavior, and it's worth spending real time on. Later in the series, once we cover sessions and state, you'll see this field can also contain placeholders like `{customer_name}` that get filled in from live conversation data, rather than being fixed text like it is here.
 
-- **`description`** — a short, one-line summary of what this agent does, separate from `instruction`. It doesn't affect how the agent behaves at all. It matters once an agent has other agents working under it: the parent uses each sub-agent's `description` to decide which one to hand a task to. In this lesson, with a single standalone agent, it's doing nothing functionally yet, but it's good practice to write it accurately from the start, since it becomes load-bearing the moment this agent joins a larger system in later lessons.
+- **`description`** (optional) — a short, one-line summary of what this agent does, separate from `instruction`. It doesn't affect how the agent behaves at all. It matters once an agent has other agents working under it: the parent uses each sub-agent's `description` to decide which one to hand a task to - so when it comes to multi-agent systems, treat this as mandatory. In this lesson, with a single standalone agent, it's doing nothing functionally yet, but it's good practice to write it accurately from the start, since it becomes load-bearing the moment this agent joins a larger system in later lessons.
 
 ## A caveat worth knowing: Claude and Gemini aren't resolved the same way
 
@@ -89,13 +91,13 @@ When you give ADK a plain model name string, it looks the name up against a set 
 
 ## Step 3: Run it with `adk run`
 
-`adk run` gives you a command-line chat loop, the fastest way to test an agent without opening a browser. From your project root (i.e. from `adk2_tutorial` folder) run the following command:
+`adk run` gives you a command-line chat loop, the fastest way to test an agent without opening a browser. From the project root (i.e. from `adk2_tutorial` folder) run the following command:
 
 ```bash
 uv run adk run agents/lesson02_first_agent
 ```
 
-Notice that we are passing a folder name of the folder containing our `agent.py` file to the `adk run` command - not a Python module name!
+> 📌 **NOTE** We pass a folder name (specifically the name of the folder containing our `agent.py` file) to the `adk run` command - not a Python module name!
 
 If all runs correctly, you'll see a bunch of logging information printed on your console, which you can safely ignore, followed by this: 
 
