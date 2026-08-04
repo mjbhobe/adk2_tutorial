@@ -1,31 +1,41 @@
 # Lesson 1: Setting Up Your ADK Environment
 
-Before you write a single agent, you need a workspace that won't fight you later. We're going to set up one shared project for this entire series, using `uv` for environment management, Python 3.12, and a direct connection to Claude, without pulling in LiteLLM. By the end of this lesson, you'll have a working ADK install and a verified connection to Claude Haiku, without having built an agent yet. 
+Before you write a single agent, you need a workspace that won't fight you later. We're going to set up one shared
+project for this entire series, using `uv` for environment management, Python 3.12, and a direct connection to Claude,
+without pulling in LiteLLM. By the end of this lesson, you'll have a working ADK install and a verified connection to
+Claude Haiku, without having built an agent yet.
 
-A note before we start: this lesson went through several rounds of real-world debugging on Windows before landing here, so what follows is the corrected, clean path. If you hit something different from what's documented here, it's worth double-checking your platform and package versions, since this ecosystem moves fast.
+## Why one shared project instead of separate ones for each example?
 
-## Why one shared project instead of fourteen separate ones
+Each lesson gets its own subfolder under `agents/`, but they all live inside one `uv`-managed project with one `.env`
+file.
 
-Each lesson gets its own subfolder under `agents/`, but they all live inside one `uv`-managed project with one `.env` file. Two reasons:
+Two reasons:
 
-- `adk web` can browse a whole directory of agent subfolders at once, so by Lesson 5 you'll have a dropdown of every agent you've built so far, running side by side.
+- `adk web` can browse a whole directory of agent subfolders at once, so you'll have a dropdown of every agent you've built so far, and can pick anyone and test it in the application, rather than having to run `adk web` separately for each project.
 - You only manage one virtual environment and one set of API keys, instead of copy-pasting `.env` files fourteen times.
+
+> 📌 **NOTE:** this is not the way you'd structure your projects in production. For production use, each project should
+> have it's own separate folder, with it's own `.env` file holding the API keys, it's own config files etc.
 
 ## Step 1: Install uv
 
 If you don't have `uv` yet, install it.
 
 **macOS / Linux:**
+
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 **Windows (PowerShell):**
+
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
 Verify it landed correctly:
+
 ```bash
 uv --version
 ```
@@ -34,7 +44,7 @@ You want `0.5.0` or newer. `uv` handles both your Python version and your depend
 
 ## Step 2: Create the project
 
-We'll create all the code under a parent `adk2_tutorial` folder.
+We'll create all the code under a parent `adk2_tutorial` folder. We'll call this the **root folder of our project** - a phrase you'll encounter several times across the lessons.
 
 ```bash
 uv init adk2_tutorial --python 3.12
@@ -43,9 +53,7 @@ cd adk2_tutorial
 
 This gives you a `pyproject.toml`, a `.python-version` pinned to 3.12, and a placeholder `main.py` in the `adk2_tutorial` folder - you can delete the `main.py` file.
 
-> **NOTE:** several lessons will mention `root folder`. This is to be interpreted as the `adk2_folder`. So when we say _run from root folder_, we mean `cd /path_to/adk2_tutorial`.
-
-Confirm the interpreter:
+Confirm the interpreter version: 
 
 ```bash
 uv run python --version
@@ -64,15 +72,10 @@ uv add anthropic python-dotenv pyyaml
 
 A few things worth explaining here, since each one caused real trouble the first time through:
 
-**No `[litellm]` extra.** You might see this suggested elsewhere: `uv add "google-adk[litellm]"`. Don't use it. Current ADK releases don't expose a `litellm` extra (the real extras list is `a2a`, `agent-identity`, `all`, `benchmark`, `db`, `eval`, `extensions`, `gcp`, `mcp`, `toolbox`, `tools`, and a handful of others), so `uv` will just warn and silently skip it.
-
-**We're skipping LiteLLM entirely, on purpose.** LiteLLM is the usual way people connect ADK to non-Gemini models, and you'll see it in most tutorials. We ran into a real, current problem with it: recent LiteLLM releases bundle a Rust-accelerated core built with `maturin`, and as of mid-2026, prebuilt Windows wheels for that Rust core aren't reliably published. That means `uv`/`pip` falls back to compiling it from source, which requires a full Rust toolchain and Microsoft's C++ Build Tools, neither of which you should need just to call an LLM API.
-
-**We're pinning our ADK to version 2.5.0.** ADK is a fast-evolving framework. Google will no doubt keep adding capabilities and deprecating others as the framework matures. By pinning the version, we ensure the code listings in this series keep working exactly as written, so nothing breaks on your end simply because the ADK version has moved on. It also lets us verify and confirm that every piece of code we write behaves as expected against this specific version.
-
-Since our model policy only ever needs Claude and Gemini, and Gemini is already native to ADK, LiteLLM's real value (bridging to 100+ providers) doesn't buy us anything. Instead, we use ADK's native Anthropic provider, `google.adk.models.anthropic_llm`, which is built directly on Anthropic's official `anthropic` Python package. That package is pure Python, so there's no compiler involved, on any platform. We'll use this provider starting in Lesson 2.
-
-If a later lesson ever genuinely needs a provider outside Claude and Gemini, we'll revisit LiteLLM then, ideally on a platform where its wheel coverage is solid.
+* **No `[litellm]` extra.** You might see this suggested elsewhere: `uv add "google-adk[litellm]"`. Don't use it. Current ADK releases don't expose a `litellm` extra (the real extras list is `a2a`, `agent-identity`, `all`, `benchmark`, `db`, `eval`, `extensions`, `gcp`, `mcp`, `toolbox`, `tools`, and a handful of others), so `uv` will just warn and silently skip it.
+* **We're skipping LiteLLM entirely, on purpose.** LiteLLM is the usual way people connect ADK to non-Gemini models, and you'll see it in most tutorials. Recent LiteLLM releases bundle a Rust-accelerated core built with `maturin`, and as of mid-2026, prebuilt Windows wheels for that Rust core aren't reliably published. That means `uv`/`pip` falls back to compiling it from source, which requires a full Rust toolchain and Microsoft's C++ Build Tools, neither of which you should need just to call an LLM API.
+* **We're pinning our ADK to version 2.5.0.** ADK is a fast-evolving framework. Google will no doubt keep adding capabilities and deprecating others as the framework matures. By pinning the version, we ensure the code listings in this series keep working exactly as written, so nothing breaks on your end simply because the ADK version has moved on.  It also lets us verify and confirm that every piece of code we write behaves as expected against this specific version.
+* Since we'll be using only Claude and Gemini models throughout this series (actually Claude only, Gemini in very few exceptionall cases), and Gemini is already native to ADK, LiteLLM's real value (bridging to 100+ providers) doesn't buy us anything. Instead, we use ADK's native Anthropic provider, `google.adk.models.anthropic_llm`, which is built directly on Anthropic's official `anthropic` Python package. That package is pure Python, so there's no compiler involved, on any platform. We'll use this provider starting in Lesson 2.
 
 ## Step 4: Get your API keys
 
@@ -126,10 +129,11 @@ models:
     use_when: "only when a feature requires it, e.g. built-in Google Search grounding or code execution, which do not work with non-Gemini models"
 
 # Per-lesson override example (lessons will add entries here as we go):
-lesson_overrides: {}
+lesson_overrides: { }
 ```
 
-Keeping this in YAML rather than Python means you can change your entire series' model policy by editing one file, and it also gives your readers a single place to look if they want to substitute their own provider.
+Keeping this in YAML rather than Python means you can change your entire series' model policy by editing one file, and
+it also gives your readers a single place to look if they want to substitute their own provider.
 
 ## Step 6: VS Code setup
 
@@ -269,14 +273,14 @@ uv run scripts/verify_setup.py
 Expected output:
 
 ```
-[OK] ADK CLI installed: google-adk 2.x.x
+[OK] ADK CLI installed: google-adk 2.5.0
 [OK] Required environment variables are set
 [OK] Claude Haiku responded: 'OK'
 
 Environment is ready. Move on to Lesson 2.
 ```
 
-If the ADK CLI check fails, re-run `uv add google-adk` and make sure you're inside the `uv run` context. If the Claude check fails, double-check the key in `.env` has no stray quotes or trailing spaces.
+If the ADK CLI check fails, re-run `uv add google-adk==2.5.0` and make sure you're inside the `uv run` context. If the Claude check fails, double-check the key in `.env` has no stray quotes or trailing spaces.
 
 ## Your project structure should look like this
 
@@ -298,7 +302,7 @@ Your `pyproject.toml` dependencies section should show:
 
 ```toml
 dependencies = [
-    "google-adk>=2.5.0",
+    "google-adk==2.5.0",
     "anthropic",
     "python-dotenv",
     "pyyaml",
@@ -307,5 +311,5 @@ dependencies = [
 
 ## A word on cost
 
-This lesson cost you close to nothing: a single ten-token request to Haiku. That pattern holds for most of the series. The lessons that cost real money are the ones running multi-agent loops (Lesson 8) or deploying to GCP (Lesson 14), and I'll flag ballpark costs before those specifically.
+This lesson cost you close to nothing: a single ten-token request to Haiku. That pattern holds for most of the series. The lessons that cost real money are the ones running multi-agent loops or deploying to GCP, and we'll flag ballpark costs before those specifically.
 
