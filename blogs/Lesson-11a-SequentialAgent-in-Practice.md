@@ -46,6 +46,8 @@ Multi-agent lessons get their own nested layout, since there are now several age
 ```
 agents/lesson11a_sequential_agent/
 ├── main.py
+├── api.py
+├── streamlit_app.py
 └── loan_pipeline/
     ├── __init__.py
     ├── agent.py
