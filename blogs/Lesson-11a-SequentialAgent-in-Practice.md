@@ -15,7 +15,7 @@ You're building the loan underwriting pipeline for an NBFC (non-banking financia
 
 This is the kind of pipeline we are going to be implementing:
 
-![SequentialAgent Flow](images/sequential_agent_flow.png)
+![ADK Sequential Agent Workflow](images/sequential_agent_workflow_loan_uw.png)
 
 Each step depends on the one before it. Risk scoring is meaningless without a credit score to feed it. A decision is meaningless without a risk band to base it on. That dependency chain is exactly what `SequentialAgent` is for.
 
