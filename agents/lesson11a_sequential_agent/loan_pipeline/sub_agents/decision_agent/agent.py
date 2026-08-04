@@ -27,9 +27,12 @@ class DecisionResult(BaseModel):
         description="Final outcome of the loan application"
     )
     interest_rate: Optional[float] = Field(
-        default=None, description="Annual interest rate offered, present only when approved"
+        default=None,
+        description="Annual interest rate offered, present only when approved",
     )
-    reasons: list[str] = Field(description="Short, specific reasons behind the decision")
+    reasons: list[str] = Field(
+        description="Short, specific reasons behind the decision"
+    )
 
 
 instruction = """You are the decision agent, the final step in a loan
@@ -50,18 +53,18 @@ Apply these rules in order:
 
 1. If the intake result's is_complete is False, decision is
    "refer_to_underwriter". Reason: incomplete application data.
-2. Otherwise, call the `lookup_interest_rate` tool with the risk_band from
-   the risk scoring result.
+2. Otherwise, call the `lookup_interest_rate` tool with the risk_band and
+   base_interest_rate from the risk scoring result.
 3. If the tool reports eligible as False, decision is "rejected".
 4. If the tool reports eligible as True, decision is "approved", and
    interest_rate is the rate the tool returned.
 
 Always call the tool before approving, never guess the rate yourself. In
-reasons, reference the actual risk_band, credit_score, and
+reasons, reference the actual loan_type, risk_band, credit_score, and
 emi_to_income_ratio values you were given, not generic statements.
 """
 
-root_agent = Agent(
+decision_agent = Agent(
     name="decision_agent",
     model=get_model("primary"),
     description="Applies the underwriting rules and produces the final loan decision.",

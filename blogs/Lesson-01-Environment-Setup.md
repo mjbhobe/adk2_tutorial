@@ -41,7 +41,9 @@ uv init adk2_tutorial --python 3.12
 cd adk2_tutorial
 ```
 
-This gives you a `pyproject.toml`, a `.python-version` pinned to 3.12, and a placeholder `main.py` in the `adk2_tutorial` folder - you can delete the `main.py` file. 
+This gives you a `pyproject.toml`, a `.python-version` pinned to 3.12, and a placeholder `main.py` in the `adk2_tutorial` folder - you can delete the `main.py` file.
+
+> **NOTE:** several lessons will mention `root folder`. This is to be interpreted as the `adk2_folder`. So when we say _run from root folder_, we mean `cd /path_to/adk2_tutorial`.
 
 Confirm the interpreter:
 
@@ -51,12 +53,12 @@ uv run python --version
 
 You should see `Python 3.12.x`. ADK 2.x requires Python 3.10 or newer.
 
-**A note on activation:** you do not need to run `source .venv/bin/activate` (or the Windows equivalent) before any of the commands in this lesson. `uv add` and `uv run` create and target the project's `.venv` automatically by reading `pyproject.toml`, regardless of what's active in your shell. If you're used to `venv` + `pip`, this is one habit you can drop. Manual activation still works if you prefer it, it's just not required.
+**A note on activation:** you do not need to run `source .venv/bin/activate` (or the Windows equivalent) before any of the commands in this lesson. `uv add` and `uv run` create and target the project's `.venv` automatically by reading `pyproject.toml`, regardless of what's active in your shell. If you're used to `venv` + `pip`, this is one habit you can drop. Manual activation still works if you prefer it, it's just not required. Some lessons mention using the `source .venv/bin/activate`, but that is not strictly required.
 
 ## Step 3: Add ADK and its dependencies
 
 ```bash
-uv add google-adk
+uv add google-adk==2.5.0
 uv add anthropic python-dotenv pyyaml
 ```
 
@@ -65,6 +67,8 @@ A few things worth explaining here, since each one caused real trouble the first
 **No `[litellm]` extra.** You might see this suggested elsewhere: `uv add "google-adk[litellm]"`. Don't use it. Current ADK releases don't expose a `litellm` extra (the real extras list is `a2a`, `agent-identity`, `all`, `benchmark`, `db`, `eval`, `extensions`, `gcp`, `mcp`, `toolbox`, `tools`, and a handful of others), so `uv` will just warn and silently skip it.
 
 **We're skipping LiteLLM entirely, on purpose.** LiteLLM is the usual way people connect ADK to non-Gemini models, and you'll see it in most tutorials. We ran into a real, current problem with it: recent LiteLLM releases bundle a Rust-accelerated core built with `maturin`, and as of mid-2026, prebuilt Windows wheels for that Rust core aren't reliably published. That means `uv`/`pip` falls back to compiling it from source, which requires a full Rust toolchain and Microsoft's C++ Build Tools, neither of which you should need just to call an LLM API.
+
+**We're pinning our ADK to version 2.5.0.** ADK is a fast-evolving framework. Google will no doubt keep adding capabilities and deprecating others as the framework matures. By pinning the version, we ensure the code listings in this series keep working exactly as written, so nothing breaks on your end simply because the ADK version has moved on. It also lets us verify and confirm that every piece of code we write behaves as expected against this specific version.
 
 Since our model policy only ever needs Claude and Gemini, and Gemini is already native to ADK, LiteLLM's real value (bridging to 100+ providers) doesn't buy us anything. Instead, we use ADK's native Anthropic provider, `google.adk.models.anthropic_llm`, which is built directly on Anthropic's official `anthropic` Python package. That package is pure Python, so there's no compiler involved, on any platform. We'll use this provider starting in Lesson 2.
 

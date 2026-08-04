@@ -1,29 +1,21 @@
 # Lesson 11a: SequentialAgent in Practice
 
-Quick recap: `SequentialAgent` runs a list of sub-agents one after another, in the exact order you give it. Every sub-agent shares the same session, so a later sub-agent can read what an earlier one wrote to state. No LLM sits behind the `SequentialAgent` itself, it's a plain orchestrator. That's everything you need to know going in.
-
-You would use a `SequentialAgent` to mimic a multi-step workflow, where _the steps must follow a strict sequence one-after-another_, like a loan underwriting pipeline. Time to build it.
+Quick recap: `SequentialAgent` runs a list of sub-agents one after another, in the exact order you give it. Every sub-agent shares the same session, so a later sub-agent can read what an earlier one wrote to state. No LLM sits behind the `SequentialAgent` itself, it's a plain orchestrator. You would use a `SequentialAgent` to mimic a multi-step workflow, where the steps must follow a strict sequence one-after-another, like a loan underwriting process. 
 
 ## The problem we're solving
 
-You're building the loan underwriting pipeline for an NBFC (non-banking financial company), the exact one sketched in the last lesson. A loan application comes in as free text, naming one of three products this NBFC offers, home, car, or personal loan. Four things need to happen to it, in order:
+You're building the loan underwriting pipeline for an NBFC (non-banking financial company), the exact one sketched in the last lesson. A loan application comes in as free text. Four things need to happen to it, in order:
 
-1. **Intake** extracts structured fields from the text, including which of the three loan types was requested, and validates the applicant's PAN (Permanent Account Number, India's tax ID and the standard identity check for financial applications).
+1. **Intake** extracts structured fields from the text and validates the applicant's PAN (Permanent Account Number, India's tax ID and the standard identity check for financial applications).
 2. **Credit check** fetches the applicant's credit bureau report using that PAN.
-3. **Risk scoring** combines the bureau data with the applicant's income, the loan terms, and the loan type's base interest rate to produce a risk score and an EMI (equated monthly installment) that reflects what the applicant would actually pay.
-4. **Decision** applies the underwriting rules, prices the final interest rate based on risk, and returns approve, reject, or refer to a human underwriter.
+3. **Risk scoring** combines the bureau data with the applicant's income and the loan terms to produce a risk score.
+4. **Decision** applies the underwriting rules and returns approve, reject, or refer to a human underwriter.
 
-This is the kind of pipeline we are going to be implementing:
+This is the pipeline we are going to be implementing:
 
 ![SequentialAgent Flow](images/sequential_agent_flow.png)
 
 Each step depends on the one before it. Risk scoring is meaningless without a credit score to feed it. A decision is meaningless without a risk band to base it on. That dependency chain is exactly what `SequentialAgent` is for.
-
-Loan type matters here for a concrete reason: a home loan, a car loan, and a personal loan don't carry the same interest rate, secured loans (backed by the property or the vehicle) are cheaper than unsecured ones. This pipeline uses base rates of 8.5% for home, 7.5% for car, and 10.5% for personal. Risk scoring uses the applicant's loan type to work out a realistic EMI at that base rate, and the decision agent adds a risk-based spread on top, so the final rate an applicant is offered depends on both what they're borrowing for and how risky they look.
-
-> 📌 **NOTE:** This four-step shape isn't specific to India. A US bank would use a Social Security Number instead of a PAN and pull a FICO-style score from Experian, Equifax, or TransUnion (roughly 300 to 850, rather than the 300 to 900 CIBIL-style scale used here). A UK or EU bank would use a national ID and a local bureau instead. 
->
-> The pipeline structure carries over cleanly, _intake_, _credit check_, _risk scoring_, and a final _decision_, only the identifiers, bureaus, and score scales change. The bigger differences show up in regulation, not the pipeline shape: US lending falls under the Equal Credit Opportunity Act and Regulation B, and EU/UK automated decisions fall under GDPR's rules on profiling, which can require a human-in-the-loop path that this simplified version doesn't include. Keep that in mind if you ever adapt this pattern for a market outside India.
 
 ## How state actually flows through a SequentialAgent
 
@@ -33,11 +25,11 @@ Each of the four sub-agents in this lesson uses `output_schema` (a Pydantic mode
 
 > 📌 **NOTE:** When `output_schema` is set, ADK stores the validated result in session state as a plain Python dict, not as the Pydantic object and not as a JSON string. That matters for the next point.
 >
-> Instruction templating does a simple `str(value)` substitution. If `{credit_check_result}` resolves to a dict, what the model actually sees in its prompt is something like `{'pan_number': 'XYZAB3456C', 'credit_score': 690, ...}`. There's no nested access like `{credit_check_result.credit_score}`, you always get the whole dict as text, and the model reads the field it needs out of that text. This works fine in practice, Claude parses a printed dict without trouble, but it's worth knowing what's actually landing in the prompt.
+> Instruction templating does a simple `str(value)` substitution. If `{credit_check_result}` resolves to a dict, what the model actually sees in its prompt is something like `{'pan_number': 'XYZAB3456C', 'credit_score': 690, ...}`. There's no nested access like `{credit_check_result.credit_score}`, you always get the whole dict as text, and the model reads the field it needs out of that text. This works fine in practice, Claude parses a printed dict without trouble, but it's worth knowing what's actually landing in the prompt. Your LLM of choice (the model) could behave differently, and it's worth nothing this point!
 
-One more thing worth flagging before you write a line of code: as of ADK 2.5.0, the version this series targets, `SequentialAgent` prints a deprecation warning pointing to a newer `Workflow` class. Ignore this message for now.
+One more thing worth flagging before you write a line of code: as of ADK 2.5.0, the version this series targets, `SequentialAgent` prints a deprecation warning pointing to a newer `Workflow` class.
 
-> **NOTE:** `SequentialAgent` is fully functional today, this lesson's code runs correctly on ADK 2.5.0. The warning exists because ADK is moving toward a more general graph-based `Workflow` primitive, which the series covers later, once you've got the classic workflow agents under your belt. 
+> **NOTE:** `SequentialAgent` is fully functional today, this lesson's code runs correctly on it. The warning exists because ADK is moving toward a more general graph-based `Workflow` primitive, which the series covers later, once you've got the classic workflow agents under your belt. The ADK source itself states that `Workflow` can't yet be used as a sub-agent of another agent, so the classic workflow agents remain the right tool for the kind of pipeline you're building today.
 
 ## Step 1: Set up the folder structure
 
@@ -69,7 +61,7 @@ agents/lesson11a_sequential_agent/
             └── tools.py
 ```
 
-`loan_pipeline/agent.py` is where the `SequentialAgent` itself gets assembled. Each of the four sub-agents gets its own folder underneath, with the same `agent.py` / `tools.py` split you've used since Lesson 3. Every `__init__.py` in this tree, at every level, contains exactly one line:
+`loan_pipeline/agent.py` is where the `SequentialAgent` itself gets assembled. Each of the four sub-agents gets its own folder underneath, with the same `agent.py` / `tools.py` split we've used since Lesson 3. Every `__init__.py` in this tree, at every level, contains exactly one line:
 
 ```python
 from . import agent
@@ -129,8 +121,6 @@ Validates a raw loan application, extracts structured fields, and checks
 the PAN format before handing off to the credit check agent.
 """
 
-from typing import Literal
-
 from pydantic import BaseModel, Field
 
 from google.adk.agents import Agent
@@ -145,7 +135,6 @@ class IntakeResult(BaseModel):
 
     applicant_name: str = Field(description="Full name of the loan applicant")
     pan_number: str = Field(description="Applicant's PAN (Permanent Account Number)")
-    loan_type: Literal["home", "car", "personal"] = Field(description="Type of loan being requested")
     loan_amount: float = Field(description="Requested loan amount, in INR")
     tenure_months: int = Field(description="Requested loan tenure, in months")
     annual_income: float = Field(description="Applicant's declared annual income, in INR")
@@ -161,11 +150,8 @@ instruction = """You are the intake agent for a loan underwriting pipeline at an
 
 A loan application arrives as free-form text. Do the following:
 
-1. Extract these fields from the text: applicant_name, pan_number, loan_type,
-   loan_amount, tenure_months, annual_income, purpose. loan_type must be
-   exactly one of "home", "car", or "personal", infer it from context if the
-   applicant doesn't use that exact word (a vehicle loan is "car", a home
-   renovation or purchase loan is "home", anything else is "personal").
+1. Extract these fields from the text: applicant_name, pan_number, loan_amount,
+   tenure_months, annual_income, purpose.
 2. Call the `validate_pan_format` tool with the extracted pan_number. Never judge
    the PAN format yourself, always call the tool and use its result.
 3. Set is_complete to True only if every field above was present in the
@@ -176,7 +162,7 @@ A loan application arrives as free-form text. Do the following:
 Respond only with the structured fields. Do not add commentary outside them.
 """
 
-intake_agent = Agent(
+root_agent = Agent(
     name="intake_agent",
     model=get_model("primary"),
     description="Extracts and validates loan application fields from free-form applicant input.",
@@ -187,11 +173,11 @@ intake_agent = Agent(
 )
 ```
 
-This is the pattern from Lesson 5, `output_schema` plus `output_key`, applied to the first step of a pipeline instead of a standalone agent. `IntakeResult` guarantees every downstream agent gets clean, typed fields to work with, no parsing free text later in the chain. `loan_type` uses a `Literal` rather than a plain `str`, that's what turns "home, car, or personal, nothing else" from a hopeful instruction into something Pydantic actually enforces. `is_complete` and `missing_or_invalid_fields` exist specifically so the decision agent, four steps from now, has something concrete to check before it approves anything.
+This is the pattern from Lesson 5, `output_schema` plus `output_key`, applied to the first step of a pipeline instead of a standalone agent. `IntakeResult` guarantees every downstream agent gets clean, typed fields to work with, no parsing free text later in the chain. `is_complete` and `missing_or_invalid_fields` exist specifically so the decision agent, four steps from now, has something concrete to check before it approves anything.
 
 ## Step 3: Build the credit check agent
 
-The tool here simulates a call to a credit bureau. A real integration would hit an external API, this mocks one deterministically (i.e. same PAN -> same result) so the lesson is repeatable:
+The tool here simulates a call to a credit bureau. A real integration would hit an external API, this mocks one deterministically so the lesson is repeatable:
 
 ```python
 # agents/lesson11a_sequential_agent/loan_pipeline/sub_agents/credit_check_agent/tools.py
@@ -205,7 +191,7 @@ def get_credit_bureau_report(pan_number: str) -> dict:
     """Fetches a mock credit bureau report for an applicant.
 
     This simulates a call to a credit bureau (like CIBIL) using a
-    deterministic hash of the PAN, so the same applicant always gets the
+    deterministic hash of the PAN, so the same applicant (i.e. same PAN) always gets the
     same mock score. That makes the pipeline repeatable while you're
     learning. Swap this out for a real bureau API integration in production.
 
@@ -223,18 +209,12 @@ def get_credit_bureau_report(pan_number: str) -> dict:
     if not pan_number:
         return {"error": "pan_number is required to fetch a credit bureau report."}
 
-    # ---------- mock credit-bureau call --------------------------
-    # in a real scenario, these lines would be replaced with an
-    # actual call to the credit bureau's (e.g. CIBIL) API end-point
-    # with a valid API key (or using a mechanism defined by bureau)
-
     digest = hashlib.sha256(pan_number.encode()).hexdigest()
     seed = int(digest[:8], 16)
 
     credit_score = 300 + (seed % 601)  # 300 to 900
     existing_loans_count = seed % 4  # 0 to 3
     has_defaults = (seed % 7) == 0  # roughly 1 in 7 applicants
-    # ---------- mock credit-bureau call --------------------------
 
     return {
         "pan_number": pan_number,
@@ -284,7 +264,7 @@ report exactly as the tool gives it back to you, in the structured fields.
 Never fabricate a credit score yourself. Always call the tool.
 """
 
-credit_check_agent = Agent(
+root_agent = Agent(
     name="credit_check_agent",
     model=get_model("primary"),
     description="Fetches an applicant's credit bureau report using the PAN captured during intake.",
@@ -299,52 +279,15 @@ credit_check_agent = Agent(
 
 ## Step 4: Build the risk scoring agent
 
-This is the step where you don't want the LLM doing arithmetic. Two things live in the tool: the loan type's base interest rate, and a proper amortized EMI calculated at that rate.
+This is the step where you don't want the LLM doing arithmetic. Risk scores need to be consistent and auditable, so the actual formula lives in a tool, not in the model's head:
 
 ```python
 # agents/lesson11a_sequential_agent/loan_pipeline/sub_agents/risk_scoring_agent/tools.py
 """Lesson 11a: Tools for the risk scoring agent.
 """
 
-# In production, base interest rates come from the bank's loan pricing
-# engine or loan management system (LMS), for example Finacle, or a
-# dedicated rates microservice, not a hardcoded dict. Rates there change
-# with market conditions, funding cost, and product-level pricing
-# decisions, sometimes daily. Query that service by loan_type (and often
-# tenure and loan amount slab too) rather than baking rates into agent
-# code. This dict is a stand-in for that lookup, so the lesson doesn't
-# depend on a rates service that doesn't exist for it.
-BASE_INTEREST_RATES = {
-    "home": 8.5,
-    "car": 7.5,
-    "personal": 10.5,
-}
-
-
-def calculate_emi(loan_amount: float, annual_rate: float, tenure_months: int) -> float:
-    """Calculates the standard amortized EMI for a loan.
-
-    Uses the standard reducing-balance EMI formula:
-    EMI = P * r * (1 + r)^n / ((1 + r)^n - 1), where r is the monthly
-    interest rate and n is the tenure in months.
-
-    Args:
-        loan_amount: Principal amount, in INR.
-        annual_rate: Annual interest rate, as a percentage (e.g. 8.5 for 8.5%).
-        tenure_months: Loan tenure, in months.
-
-    Returns:
-        The monthly EMI, in INR.
-    """
-    monthly_rate = annual_rate / 12 / 100
-    if monthly_rate == 0:
-        return loan_amount / tenure_months
-    growth_factor = (1 + monthly_rate) ** tenure_months
-    return loan_amount * monthly_rate * growth_factor / (growth_factor - 1)
-
 
 def calculate_risk_score(
-    loan_type: str,
     credit_score: int,
     annual_income: float,
     loan_amount: float,
@@ -353,13 +296,12 @@ def calculate_risk_score(
 ) -> dict:
     """Calculates a deterministic risk score for a loan application.
 
-    Combines the bureau credit score with an affordability check based on
-    the actual amortized EMI for this loan type's base interest rate. This
-    is a teaching model, not a production underwriting formula, real risk
-    models weigh many more factors and get validated by a risk team.
+    Combines the bureau credit score with a rough affordability check, an
+    approximate EMI (equated monthly installment) against monthly income.
+    This is a simple dummy model, not a production underwriting formula, real
+    risk models weigh many more factors and get validated by a risk team.
 
     Args:
-        loan_type: One of "home", "car", or "personal".
         credit_score: CIBIL-style score between 300 and 900.
         annual_income: Applicant's declared annual income, in INR.
         loan_amount: Requested loan amount, in INR.
@@ -370,23 +312,18 @@ def calculate_risk_score(
         A dict with:
             risk_score (float): 0 to 100, higher means lower risk.
             risk_band (str): "Low", "Medium", or "High".
-            emi_to_income_ratio (float): EMI as a fraction of monthly income.
-            base_interest_rate (float): The loan type's base rate used for
-                this calculation.
+            emi_to_income_ratio (float): Approximate EMI as a fraction of
+                monthly income.
             error (str, optional): Present only on invalid inputs.
     """
-    if loan_type not in BASE_INTEREST_RATES:
-        return {"error": f"Unknown loan_type '{loan_type}'."}
     if tenure_months <= 0 or annual_income <= 0:
         return {"error": "tenure_months and annual_income must both be positive."}
-
-    base_interest_rate = BASE_INTEREST_RATES[loan_type]
 
     credit_component = (credit_score / 900) * 60  # up to 60 points
 
     monthly_income = annual_income / 12
-    emi = calculate_emi(loan_amount, base_interest_rate, tenure_months)
-    emi_to_income_ratio = round(emi / monthly_income, 2)
+    approx_emi = loan_amount / tenure_months  # ignores interest, a deliberate simplification
+    emi_to_income_ratio = round(approx_emi / monthly_income, 2)
     affordability_component = max(0.0, (1 - emi_to_income_ratio) * 40)  # up to 40 points
 
     risk_score = credit_component + affordability_component
@@ -406,13 +343,10 @@ def calculate_risk_score(
         "risk_score": risk_score,
         "risk_band": risk_band,
         "emi_to_income_ratio": emi_to_income_ratio,
-        "base_interest_rate": base_interest_rate,
     }
 ```
 
-Two things worth calling out. First, `calculate_emi` is now a real amortization formula, not the loan-amount-divided-by-tenure shortcut from before, that shortcut silently ignored interest entirely, which meant the "affordability" the risk score was checking wasn't the affordability the applicant would actually experience. Second, notice the base rate comes from the loan type, not the risk band. This step deliberately prices the affordability check at the *base* rate, the same rate every applicant of that loan type starts from, before risk-based pricing gets applied. That mirrors how a real pre-approval works: you check "can they afford this at our standard rate" first, and only the decision agent, one step from now, moves the rate up or down based on how risky they turned out to be.
-
-The rest of the formula is unchanged: up to 60 points from the credit score, up to 40 from affordability, minus a 25-point penalty for a prior default. Real risk models are far more elaborate and get validated by an actual risk team before going anywhere near production, this version exists to give the pipeline something concrete and explainable to work with.
+The formula is deliberately simple: up to 60 points from the credit score, up to 40 from how comfortably the applicant can afford the EMI, minus a 25-point penalty for a prior default. Real risk models are far more elaborate and get validated by an actual risk team before going anywhere near production, this version exists to give the pipeline something concrete and explainable to work with.
 
 ```python
 # agents/lesson11a_sequential_agent/loan_pipeline/sub_agents/risk_scoring_agent/agent.py
@@ -420,6 +354,11 @@ The rest of the formula is unchanged: up to 60 points from the credit score, up 
 
 Reads the intake and credit check results from session state and produces
 a deterministic risk score and band.
+
+@author: Manish Bhobé
+My experiments with Python, Agentic AI and ADK.
+Code shared for learning purposes only! Use at your own risk.
+No warranties or guarantees of any kind.
 """
 
 from pydantic import BaseModel, Field
@@ -436,8 +375,7 @@ class RiskScoringResult(BaseModel):
 
     risk_score: float = Field(description="Risk score from 0 to 100, higher means lower risk")
     risk_band: str = Field(description='One of "Low", "Medium", or "High"')
-    emi_to_income_ratio: float = Field(description="EMI as a fraction of monthly income")
-    base_interest_rate: float = Field(description="The loan type's base interest rate used to compute the EMI")
+    emi_to_income_ratio: float = Field(description="Approximate EMI as a fraction of monthly income")
 
 
 instruction = """You are the risk scoring agent for a loan underwriting pipeline at an NBFC.
@@ -450,16 +388,15 @@ Intake result:
 Credit check result:
 {credit_check_result}
 
-Pull loan_type, annual_income, loan_amount, and tenure_months from the intake
-result, and credit_score plus has_defaults from the credit check result. Call
-the `calculate_risk_score` tool with those six values. Return the tool's
-result exactly, in the structured fields.
+Pull annual_income, loan_amount, and tenure_months from the intake result, and
+credit_score plus has_defaults from the credit check result. Call the
+`calculate_risk_score` tool with those five values. Return the tool's result
+exactly, in the structured fields.
 
-Always call the tool. Never estimate the score, the EMI, or the base
-interest rate yourself.
+Always call the tool. Never estimate the score yourself.
 """
 
-risk_scoring_agent = Agent(
+root_agent = Agent(
     name="risk_scoring_agent",
     model=get_model("primary"),
     description="Calculates a deterministic risk score and band from intake and credit bureau data.",
@@ -470,46 +407,44 @@ risk_scoring_agent = Agent(
 )
 ```
 
-Notice this agent reads from two prior state keys, `{intake_result}` and `{credit_check_result}`, not just the one immediately before it. `SequentialAgent` doesn't restrict you to only reading the previous step's output, every sub-agent shares the same session, so anything written earlier in the pipeline stays readable for the rest of it. And `base_interest_rate` now travels forward in `RiskScoringResult`, so the decision agent doesn't need to know anything about loan types or rate cards itself, it just reads the number risk scoring already resolved.
+Notice this agent reads from two prior state keys, `{intake_result}` and `{credit_check_result}`, not just the one immediately before it. `SequentialAgent` doesn't restrict you to only reading the previous step's output, every sub-agent shares the same session, so anything written earlier in the pipeline stays readable for the rest of it.
 
 ## Step 5: Build the decision agent
 
-The final step. Its tool now combines two numbers instead of doing a flat lookup: the base rate risk scoring already resolved for this loan type, plus a spread that depends on how risky the applicant turned out to be.
+The final step. Its tool is a simple rate card lookup:
 
 ```python
 # agents/lesson11a_sequential_agent/loan_pipeline/sub_agents/decision_agent/tools.py
 """Lesson 11a: Tools for the decision agent.
+
+@author: Manish Bhobé
+My experiments with Python, Agentic AI and ADK.
+Code shared for learning purposes only! Use at your own risk.
+No warranties or guarantees of any kind.
 """
 
-# The spread a bank adds on top of its base rate for a given risk band.
-# Like the base rates in the risk scoring agent, this would normally come
-# from the same loan pricing engine or LMS, risk-based pricing tables get
-# reviewed and adjusted by the risk team, not hardcoded into application
-# code. Kept as a simple dict here for the same reason.
-RISK_BAND_SPREAD = {
-    "Low": 0.0,
-    "Medium": 2.5,
+_RATE_CARD = {
+    "Low": 10.5,
+    "Medium": 13.5,
 }
 
 
-def lookup_interest_rate(risk_band: str, base_interest_rate: float) -> dict:
-    """Looks up the final interest rate offered for a given risk band.
+def lookup_interest_rate(risk_band: str) -> dict:
+    """Looks up the interest rate offered for a given risk band.
 
-    Combines the loan type's base rate (already resolved by the risk
-    scoring agent) with a risk-based spread. "High" risk applicants are
-    not offered a rate at all, they're rejected outright.
+    A stand-in for a real rate card lookup. In production this would read
+    from a pricing service that moves with market conditions, not a fixed
+    dict.
 
     Args:
         risk_band: One of "Low", "Medium", or "High".
-        base_interest_rate: The loan type's base rate, as computed by the
-            risk scoring agent's `calculate_risk_score` tool.
 
     Returns:
         A dict with:
             risk_band (str): The band that was looked up.
             eligible (bool): False for "High" risk, no rate is offered.
-            interest_rate (float, optional): Final annual interest rate as
-                a percentage, present only when eligible is True.
+            interest_rate (float, optional): Annual interest rate as a
+                percentage, present only when eligible is True.
             error (str, optional): Present only for an unrecognized band.
     """
     if risk_band not in ("Low", "Medium", "High"):
@@ -518,16 +453,12 @@ def lookup_interest_rate(risk_band: str, base_interest_rate: float) -> dict:
     if risk_band == "High":
         return {"risk_band": risk_band, "eligible": False}
 
-    interest_rate = round(base_interest_rate + RISK_BAND_SPREAD[risk_band], 2)
-
     return {
         "risk_band": risk_band,
         "eligible": True,
-        "interest_rate": interest_rate,
+        "interest_rate": _RATE_CARD[risk_band],
     }
 ```
-
-A Low-risk applicant pays exactly the loan type's base rate, no spread. A Medium-risk applicant pays base rate plus 2.5 percentage points. High risk isn't priced at all, it's declined. This is the piece that makes the credit score actually matter to the applicant's wallet, two people applying for the same car loan can walk away with different rates depending on how they scored.
 
 ```python
 # agents/lesson11a_sequential_agent/loan_pipeline/sub_agents/decision_agent/agent.py
@@ -535,6 +466,11 @@ A Low-risk applicant pays exactly the loan type's base rate, no spread. A Medium
 
 Reads all three prior results from session state and produces the final
 loan decision.
+
+@author: Manish Bhobé
+My experiments with Python, Agentic AI and ADK.
+Code shared for learning purposes only! Use at your own risk.
+No warranties or guarantees of any kind.
 """
 
 from typing import Literal, Optional
@@ -578,18 +514,18 @@ Apply these rules in order:
 
 1. If the intake result's is_complete is False, decision is
    "refer_to_underwriter". Reason: incomplete application data.
-2. Otherwise, call the `lookup_interest_rate` tool with the risk_band and
-   base_interest_rate from the risk scoring result.
+2. Otherwise, call the `lookup_interest_rate` tool with the risk_band from
+   the risk scoring result.
 3. If the tool reports eligible as False, decision is "rejected".
 4. If the tool reports eligible as True, decision is "approved", and
    interest_rate is the rate the tool returned.
 
 Always call the tool before approving, never guess the rate yourself. In
-reasons, reference the actual loan_type, risk_band, credit_score, and
+reasons, reference the actual risk_band, credit_score, and
 emi_to_income_ratio values you were given, not generic statements.
 """
 
-decision_agent = Agent(
+root_agent = Agent(
     name="decision_agent",
     model=get_model("primary"),
     description="Applies the underwriting rules and produces the final loan decision.",
@@ -600,7 +536,7 @@ decision_agent = Agent(
 )
 ```
 
-By this point the instruction has three state keys to read from, and the rules are written as an explicit numbered sequence rather than left for the model to infer. The more a step resembles a policy you could hand to a new employee on day one, the more it helps to write it that literally in the instruction. Notice `lookup_interest_rate` now takes two arguments instead of one, `base_interest_rate` travels all the way from the risk scoring agent's tool call, through session state, into this agent's tool call, without this agent ever needing to know how that number was computed. That's the same state-passing mechanism you saw between every other step in this pipeline, just carrying a number instead of a whole result object this time.
+By this point the instruction has three state keys to read from, and the rules are written as an explicit numbered sequence rather than left for the model to infer. The more a step resembles a policy you could hand to a new employee on day one, the more it helps to write it that literally in the instruction.
 
 ## Step 6: Assemble the SequentialAgent
 
@@ -621,19 +557,19 @@ No warranties or guarantees of any kind.
 
 from google.adk.agents import SequentialAgent
 
-from .sub_agents.intake_agent.agent import intake_agent
-from .sub_agents.credit_check_agent.agent import credit_check_agent
-from .sub_agents.risk_scoring_agent.agent import risk_scoring_agent
-from .sub_agents.decision_agent.agent import decision_agent
+from .sub_agents.intake_agent import agent as intake_agent_module
+from .sub_agents.credit_check_agent import agent as credit_check_agent_module
+from .sub_agents.risk_scoring_agent import agent as risk_scoring_agent_module
+from .sub_agents.decision_agent import agent as decision_agent_module
 
 root_agent = SequentialAgent(
     name="loan_underwriting_pipeline",
     description="Runs a loan application through intake, credit check, risk scoring, and decision, in order.",
     sub_agents=[
-        intake_agent,
-        credit_check_agent,
-        risk_scoring_agent,
-        decision_agent,
+        intake_agent_module.root_agent,
+        credit_check_agent_module.root_agent,
+        risk_scoring_agent_module.root_agent,
+        decision_agent_module.root_agent,
     ],
 )
 ```
@@ -647,6 +583,11 @@ Same shape as every `main.py` you've written since Lesson 6a: `load_dotenv`, a `
 ```python
 # agents/lesson11a_sequential_agent/main.py
 """Lesson 11a: Run the loan underwriting SequentialAgent pipeline.
+
+@author: Manish Bhobé
+My experiments with Python, Agentic AI and ADK.
+Code shared for learning purposes only! Use at your own risk.
+No warranties or guarantees of any kind.
 """
 
 import asyncio
@@ -713,34 +654,13 @@ uv run agents/lesson11a_sequential_agent/main.py
 Paste in a loan application as plain text, something like:
 
 ```
-Application: Rohan Mehta wants a car loan of INR 800000 over 60 months to buy a new car. His PAN is ROHAN1234M and his annual income is INR 1200000.
+Application: Ananya Rao is applying for a home renovation loan of INR 400000
+over 48 months. Her PAN is XYZAB3456C and her annual income is INR 1500000.
 ```
 
-Watch the pipeline run through all four steps, intake, credit check, risk scoring, decision, and print the final structured result. With this particular applicant, you should see something close to: `loan_type` captured as `car`, PAN validated, a credit score around 773 with no prior defaults, an EMI-to-income ratio around 0.16, a risk score in the Low band, and an approved decision at 7.5%, the car loan base rate with no spread added, since Low risk pays exactly the base rate.
+Watch the pipeline run through all four steps, intake, credit check, risk scoring, decision, and print the final structured result. With this particular applicant, you should see something close to: PAN validated, a credit score around 690 with no prior defaults, a risk score in the low-risk band, and an approved decision with an interest rate of 10.5%.
 
-Now try a personal loan application for a less pristine applicant:
-
-```
-Application: Priya Nair needs a personal loan of INR 500000 over 36 months for medical expenses. Her PAN is PRIYA9012N and her annual income is INR 900000.
-```
-
-This one should land in the Medium risk band, credit score around 540, still no defaults, but a weaker score pulls the risk score down. The decision agent should still approve it, but at 13.0%, the personal loan base rate of 10.5% plus the 2.5-point Medium-risk spread. Comparing these two runs side by side is the point of this revision: same pipeline, same rules, but the loan type and the risk band together produce a genuinely different rate, not just a different pass/fail outcome.
-
-Try a third application with a much smaller income relative to the loan amount, or a fabricated PAN like `NOTAPAN123`, and watch the decision change. An invalid PAN should push `is_complete` to `False` at the intake step and come out the other end as `refer_to_underwriter`, without the pipeline ever reaching the credit check or risk scoring agents' actual banking logic in a meaningful way, since the whole point of a bad `is_complete` is that the decision agent short-circuits on it.
-
-## Try it in `adk web` too
-
-Everything above ran through `main.py`, and that's the right way to run this pipeline day to day, but there's a faster way to actually _watch_ `SequentialAgent` work through its four steps: `adk web`. Instead of pointing it at `loan_pipeline` directly, point it at the parent folder:
-
-```bash
-adk web agents/lesson11a_sequential_agent
-```
-
-`adk web` scans that directory for agent packages, each subfolder with an `agent.py` exposing a root_agent, and lists them in a dropdown in the browser UI. Select `loan_pipeline`, paste in the same kind of application text you used earlier, and send it. You'll see the run unfold as four distinct steps in the trace panel, intake, credit check, risk scoring, decision, each with its own tool call and structured output visible individually, in the order `SequentialAgent` ran them. It's a genuinely useful way to build intuition for what "sub-agents sharing one session" actually looks like turn by turn, something main.py's single printed response doesn't show you.
-
-> 📌 **NOTE:** `adk web` is a development tool, meant for exactly this kind of inspection while you're building and debugging. **It's not how you'd run this pipeline in production**, that's what `main.py` (or, more realistically, the FastAPI serving pattern from Lesson 9) is for. Reach for `adk web` when you want to see what's happening inside a run, reach for main.py or a proper served endpoint when something else needs to actually call this pipeline.
->
-> **One thing worth flagging:** this only works as written because `loan_pipeline/agent.py`'s `SequentialAgent` is still named `root_agent`, that's the one file adk web's discovery convention actually depends on.
+Try a second application with a much smaller income relative to the loan amount, or a fabricated PAN like `NOTAPAN123`, and watch the decision change. An invalid PAN should push `is_complete` to `False` at the intake step and come out the other end as `refer_to_underwriter`, without the pipeline ever reaching the credit check or risk scoring agents' actual banking logic in a meaningful way, since the whole point of a bad `is_complete` is that the decision agent short-circuits on it.
 
 ## If you're coming from LangChain or LangGraph
 
@@ -750,7 +670,7 @@ The difference is in what you write by hand. LangGraph makes you define the stat
 
 ## In this lesson
 
-You built a working four-agent `SequentialAgent` pipeline for loan underwriting: intake, credit check, risk scoring, and decision, each its own small agent with its own tool and structured output. Intake now captures which of three loan types, home, car, or personal, the applicant wants, and that choice flows all the way through the pipeline: risk scoring uses it to price a realistic, amortized EMI at the loan type's base rate, and the decision agent adds a risk-based spread on top to arrive at the final offered rate. You saw `output_schema` and `output_key` chain results across steps through session state, including a number (`base_interest_rate`) passed forward the same way a whole result object would be, and picked up two details that only show up once you build one of these for real: state gets stored as a plain dict, and instruction templating stringifies it rather than giving you nested field access. You also saw that `SequentialAgent` still works cleanly today, deprecation warning aside, and why that warning doesn't change anything about this lesson's code.
+You built a working four-agent `SequentialAgent` pipeline for loan underwriting: intake, credit check, risk scoring, and decision, each its own small agent with its own tool and structured output. You saw `output_schema` and `output_key` chain results across steps through session state, and picked up two details that only show up once you build one of these for real: state gets stored as a plain dict, and instruction templating stringifies it rather than giving you nested field access. You also saw that `SequentialAgent` still works cleanly today, deprecation warning aside, and why that warning doesn't change anything about this lesson's code.
 
 ## In the next lesson
 

@@ -24,7 +24,9 @@ class CreditCheckResult(BaseModel):
     pan_number: str = Field(description="PAN the bureau report was fetched for")
     credit_score: int = Field(description="CIBIL-style score, 300 to 900")
     existing_loans_count: int = Field(description="Number of currently active loans")
-    has_defaults: bool = Field(description="True if the bureau history shows a prior default")
+    has_defaults: bool = Field(
+        description="True if the bureau history shows a prior default"
+    )
 
 
 instruction = """You are the credit check agent for a loan underwriting pipeline at an NBFC.
@@ -39,7 +41,7 @@ report exactly as the tool gives it back to you, in the structured fields.
 Never fabricate a credit score yourself. Always call the tool.
 """
 
-root_agent = Agent(
+credit_check_agent = Agent(
     name="credit_check_agent",
     model=get_model("primary"),
     description="Fetches an applicant's credit bureau report using the PAN captured during intake.",
