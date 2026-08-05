@@ -163,11 +163,13 @@ Under the hood, setting the flag causes ADK to run the search as an isolated sub
 
 One thing that flag does not change though: it only relaxes the one-built-in-tool-per-agent restriction, not the model restriction, so `GoogleSearchTool`, with or without `bypass_multi_tools_limit`, still works _only with Gemini models_ 🙁. 
 
-Ok, enough of _gyan_. Let's run our agent! Type in the following command(s) from a command prompt:
+Ok, enough of _gyan_. Let's run our agent! 
+
+Type in the following command(s) from the project root folder in a new terminal:
 
 ```bash
-# ensure your uv environment is active
-source .venv/bin/activate # or .venv\Scripts\activate on Windows
+# activate the local env first!
+source .venv/bin/activate 
 # run the agent
 uv run adk run agents/lesson04_built_in_tools
 ```
@@ -178,7 +180,7 @@ Ask about a price:
 What's Reliance Industries trading at? Ticker is RELIANCE.NS
 ```
 
-You should see it call `get_stock_price` and come back with a current close price, the previous close, and the percentage move, worded as a short factual statement. I got a response like the following - your's would be different as it's a _live_ price that is displayed. Check on the Yahoo Finance! website that it shows the same values. Mine tallied, so all good!
+You should see it call `get_stock_price` and come back with a current close price, the previous close, and the percentage move, worded as a short factual statement. I got a response like the following - your's would be different as it's a _live_ price that is being displayed. Check on the Yahoo Finance! website that it shows the same values. Mine tallied the day I ran it, so all good!
 
 > [market_briefing_agent]: Reliance Industries Limited (RELIANCE.NS) is trading at **₹1,267.70**, down **-0.96%** (a decrease of ₹12.30) from its previous close of ₹1,280.00.
 
