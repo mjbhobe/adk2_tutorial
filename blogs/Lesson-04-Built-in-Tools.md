@@ -1,10 +1,10 @@
 # Lesson 4: Built-in Tools
 
-Lesson 3 gave an agent function tools you wrote yourself. This lesson introduces a different category: tools that ADK ships built in, where the model calls out to a capability Google runs on its own infrastructure rather than code sitting in your project. We'll build  and agent with one directly - `google_search`, hit a real, current limitation along the way, and then build a genuine, working alternative for Claude, since Claude is our default for this series.
+Lesson 3 gave an agent function tools you wrote yourself. This lesson introduces a different category: tools that ADK ships built in, where the model calls out to a capability Google runs on its own infrastructure rather than code sitting in your project. We'll build an agent with one directly - `google_search`, hit a real, current limitation along the way, and then build a genuine, working alternative for Claude, since Claude is our default for this series.
 
 ## The problem we're solving
 
-A wealth management desk's investment research team gets asked two kinds of questions constantly: "What's Reliance Industries trading at right now?" and "Why did Tesla's stock move today?" The first is a data lookup, exactly the kind of thing Lesson 3's function tools handle well. The second request would need a slightly different approach - get the latest information from the web about Tesla to the LLM and let it figure out why Tesla's stock moved today. That's exactly what Google's search excels
+A wealth management desk's investment research team gets asked two kinds of questions constantly: "What's Reliance Industries trading at right now?" and "Why did Tesla's stock move today?" The first is a data lookup, exactly the kind of thing Lesson 3's function tools handle well. The second request would need a slightly different approach - get the latest information from the web about Tesla to the LLM and let it figure out why Tesla's stock moved today, because it could very well be related to some _market event_. That's exactly what Google's search excels
 at, and what we are going to leverage for the 2nd kind of request.
 
 We're going to build a market briefing agent that handles both: live prices via a function tool, and current news via web search. For live stock prices we'll use the `yfinance` library and we'll use an internal tool `google_search` for web searching.

@@ -2,13 +2,11 @@
 
 Before you write a single agent, you need a workspace that won't fight you later. We're going to set up one shared
 project for this entire series, using `uv` for environment management, Python 3.12, and a direct connection to Claude,
-without pulling in LiteLLM. By the end of this lesson, you'll have a working ADK install and a verified connection to
-Claude Haiku, without having built an agent yet.
+without pulling in LiteLLM. By the end of this lesson, you'll have a working ADK install and a verified connection to Claude Haiku, without having built an agent yet.
 
 ## Why one shared project instead of separate ones for each example?
 
-Each lesson gets its own subfolder under `agents/`, but they all live inside one `uv`-managed project with one `.env`
-file.
+Each lesson gets its own subfolder under `agents/`, but they all live inside one `uv`-managed project with one `.env` file.
 
 Two reasons:
 
@@ -44,7 +42,7 @@ You want `0.5.0` or newer. `uv` handles both your Python version and your depend
 
 ## Step 2: Create the project
 
-We'll create all the code under a parent `adk2_tutorial` folder. We'll call this the **root folder of our project** - a phrase you'll encounter several times across the lessons.
+We'll create all the code under a parent `adk2_tutorial` folder. We'll call this the **root folder of our project** - a phrase you'll encounter several times across the lessons. This folder can be created _anywhere_ on disk. We will build our projects under this folder.
 
 ```bash
 uv init adk2_tutorial --python 3.12
@@ -53,7 +51,26 @@ cd adk2_tutorial
 
 This gives you a `pyproject.toml`, a `.python-version` pinned to 3.12, and a placeholder `main.py` in the `adk2_tutorial` folder - you can delete the `main.py` file.
 
-Confirm the interpreter version: 
+Activate the local environment you just created
+
+```bash
+source .venv/bin/activate
+```
+
+> 📌**NOTE:** you should always activate the local environment before installing any new modules or running any code we create.
+>
+> To activate the just created local enviironment (assuming you have already `cd`ed to `adk2_tutorial` folder!), use the following command
+>
+> `source .venv/bin/activate` - on Linux/Mac<br/>
+> 
+> On Windows you have the following options: <br/>
+> `.venv\Script\activate.bat` - on Windows CMD shell <br/>
+> `.venv\Script\activate.ps1` - on Windows Powershell <br/>
+> `source .venv/Script/activate` - on a git-bash shell <br/>
+>
+> In all the lessons, you'll see me use the Linux/Mac version of the command, because I'm using a Manjaro KDE Linux machine. Replace this with the appropriate command for your OS.
+
+Confirm the interpreter version:
 
 ```bash
 uv run python --version
@@ -61,9 +78,19 @@ uv run python --version
 
 You should see `Python 3.12.x`. ADK 2.x requires Python 3.10 or newer.
 
-**A note on activation:** you do not need to run `source .venv/bin/activate` (or the Windows equivalent) before any of the commands in this lesson. `uv add` and `uv run` create and target the project's `.venv` automatically by reading `pyproject.toml`, regardless of what's active in your shell. If you're used to `venv` + `pip`, this is one habit you can drop. Manual activation still works if you prefer it, it's just not required. Some lessons mention using the `source .venv/bin/activate`, but that is not strictly required.
+> 🎗️ **A matter of convenience**
+>
+> I often switch between my Linux box and a Windows 11 box during development. I don't own a Mac 🙁.
+>
+> To keep the Linux _feel_ going on Windows, I use a `git-bash` terminal. It gets installed when you install `git` for version control - I strongly recommend you use `git` too. Install it on Windows from [here](https://git-scm.com/install/). This is a much _lighter_ alternative to the Windows Shell for Linux (WSL), which I don't use.
+>
+> Along with `git` for Windows install, I get `git-bash` and most of my _most frequently_ used commands, like `touch`, `find`, `grep` etc. for _free_. Inside the `git-bash` shell I can continue to use `/` for directory separators, so `cd c:\code\adk2_tutorial` becomes `cd /c/code/adk2_tutorial` 😊. 
+> 
+> You'll notice throughout these lessons that we use the Unix/Linux convention for paths (the `/` forward slash separator). So if you'll be _copying and pasting_ the commands I show into your shell, and you are on Windows, it's best to use the `git-bash` shell to avoid _translating_ paths.
 
 ## Step 3: Add ADK and its dependencies
+
+Once your local environment is activated, run the following commands to add the required modules.
 
 ```bash
 uv add google-adk==2.5.0
@@ -72,8 +99,8 @@ uv add anthropic python-dotenv pyyaml
 
 A few things worth explaining here, since each one caused real trouble the first time through:
 
-* **No `[litellm]` extra.** You might see this suggested elsewhere: `uv add "google-adk[litellm]"`. Don't use it. Current ADK releases don't expose a `litellm` extra (the real extras list is `a2a`, `agent-identity`, `all`, `benchmark`, `db`, `eval`, `extensions`, `gcp`, `mcp`, `toolbox`, `tools`, and a handful of others), so `uv` will just warn and silently skip it.
-* **We're skipping LiteLLM entirely, on purpose.** LiteLLM is the usual way people connect ADK to non-Gemini models, and you'll see it in most tutorials. Recent LiteLLM releases bundle a Rust-accelerated core built with `maturin`, and as of mid-2026, prebuilt Windows wheels for that Rust core aren't reliably published. That means `uv`/`pip` falls back to compiling it from source, which requires a full Rust toolchain and Microsoft's C++ Build Tools, neither of which you should need just to call an LLM API.
+* **No `[litellm]` extra.** You might see this suggested elsewhere: `uv add "google-adk[litellm]"`. Don't use it! Current ADK releases don't expose a `litellm` extra (the real extras list is `a2a`, `agent-identity`, `all`, `benchmark`, `db`, `eval`, `extensions`, `gcp`, `mcp`, `toolbox`, `tools`, and a handful of others), so `uv` will just warn and silently skip it.
+* **We're skipping LiteLLM entirely, on purpose.** `LiteLLM` is the usual way people connect ADK to non-Gemini models, and you'll see it in most tutorials. Recent LiteLLM releases bundle a Rust-accelerated core built with `maturin`, and as of mid-2026, prebuilt Windows wheels for that Rust core aren't reliably published. That means `uv`/`pip` falls back to compiling it from source, which requires a full Rust toolchain and Microsoft's C++ Build Tools, neither of which you should need just to call an LLM API.
 * **We're pinning our ADK to version 2.5.0.** ADK is a fast-evolving framework. Google will no doubt keep adding capabilities and deprecating others as the framework matures. By pinning the version, we ensure the code listings in this series keep working exactly as written, so nothing breaks on your end simply because the ADK version has moved on.  It also lets us verify and confirm that every piece of code we write behaves as expected against this specific version.
 * Since we'll be using only Claude and Gemini models throughout this series (actually Claude only, Gemini in very few exceptionall cases), and Gemini is already native to ADK, LiteLLM's real value (bridging to 100+ providers) doesn't buy us anything. Instead, we use ADK's native Anthropic provider, `google.adk.models.anthropic_llm`, which is built directly on Anthropic's official `anthropic` Python package. That package is pure Python, so there's no compiler involved, on any platform. We'll use this provider starting in Lesson 2.
 
@@ -103,7 +130,7 @@ GOOGLE_GENAI_USE_VERTEXAI=FALSE
 
 `GOOGLE_GENAI_USE_VERTEXAI=FALSE` tells ADK to hit the Gemini API directly through your AI Studio key instead of expecting a Vertex AI / GCP project. We'll flip that later, in the deployment lesson, once we actually provision GCP resources.
 
-Create `config/models.yaml`. This is the file that encodes your Haiku-first, Sonnet-if-needed, Gemini-Flash-last-resort policy, so every lesson reads from the same place instead of each agent deciding for itself:
+Create `config/models.yaml`. This is the file that encodes our Haiku-first, Sonnet-if-needed, Gemini-Flash-last-resort policy, so every lesson reads from the same place instead of each agent deciding for itself:
 
 ```yaml
 # config/models.yaml
@@ -282,10 +309,13 @@ Environment is ready. Move on to Lesson 2.
 
 If the ADK CLI check fails, re-run `uv add google-adk==2.5.0` and make sure you're inside the `uv run` context. If the Claude check fails, double-check the key in `.env` has no stray quotes or trailing spaces.
 
-## Your project structure should look like this
+## Your project structure should now look like this
 
 ```
-adk2_tutorial/
+# you can create adk2_tutorial anywhere on disk (hence the)
+# when we refer to "project root folder" we mean the 
+# complete path to this adk2_tutorial folder.
+.../adk2_tutorial/
 ├── .env
 ├── .python-version
 ├── pyproject.toml
