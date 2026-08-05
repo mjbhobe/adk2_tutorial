@@ -70,4 +70,7 @@ root_agent = Agent(
     ),
     tools=[calculate_debt_to_income_ratio],
     output_schema=CreditRiskAssessment,
+    # uncomment following like to also write the structured
+    # output to session state at key "latest_credit_assessment"
+    # output_key="latest_credit_assessment",
 )

@@ -8,13 +8,15 @@ A retail bank's underwriting desk has loan officers reviewing applicant files an
 
 We're going to build an agent that produces a credit risk assessment as its output, but instead of a paragraph, it will return a fixed, validated JSON shape every time: a _risk tier_ that's always one of three exact values, a boolean _recommendation_, a _maximum recommended loan amount_, a _list of specific risk factors_, and a short _rationale_. Every field, every time, in the same shape, ready to be written straight into a database row or an API call without anyone touching it by hand.
 
+![Structured Output](images/structured_outputs.png)
+
 ## Why structured output needs special handling
 
 Left alone, an LLM's output is just text, and text is inherently unpredictable in its exact shape. You can ask a model nicely to _"please respond in JSON with these fields,"_. Modern models are decent at following that instruction, but "decent" isn't good enough for a downstream system that will throw an error, or silently accept garbage, the moment a field is missing, misspelled, or comes back as a string instead of a number. Prompting alone gives you a JSON-shaped suggestion, **not a guarantee**.
 
 ADK's `output_schema` closes that gap by working at a different level than the prompt. You define the exact shape you want as a Pydantic model, a Python class describing each field's name, type, and (optionally) a description. When you attach that schema to an agent, ADK passes it to the model as a formal constraint on the response, not just an instruction in the prompt text, and validates the model's final answer against it. If the response doesn't match the schema, that's a failure ADK can catch, rather than something a downstream system finds out about the hard way, three steps later, after a $0 has silently made it into a loan amount field - yikes 😰!
 
-One thing worth knowing before we write the code: older ADK versions did not allow `output_schema` and tools on the same agent at all. Forcing a fixed output shape and letting the model call functions used to conflict with each other. That restriction was lifted around ADK 1.17–1.19, well before the version we're using, so this combination works today.
+One thing worth knowing before we write the code: older ADK versions did not allow `output_schema` and tools on the same agent. Forcing a fixed output shape and letting the model call functions used to conflict with each other. That restriction was lifted around ADK 1.17–1.19, well before the version 2.5.0 we're using, so this combination works today.
 
 > 📌 **NOTE - One caveat worth being upfront about:**
 >
@@ -204,7 +206,7 @@ And this is what I see.
     <image src="images/credit_check3.png" alt="Credit Check 3- Claude"/>
 </div>
 
-## Taking it further: output_key
+## Taking it further: `output_key`
 
 There's one more parameter worth knowing before we leave this lesson: `output_key`. When you add `output_key="some_key"` to your `Agent` definition alongside `output_schema`, ADK automatically writes the validated structured output into the session's state dictionary under that key after every turn, without any extra code from you.
 
@@ -227,7 +229,21 @@ root_agent = Agent(
 
 After each turn, `session.state["latest_credit_assessment"]` will contain the structured verdict as a dictionary. In practice, this means any other agent, tool, or callback later in your application can read the assessment result directly from state, without you wiring up any explicit data-passing between components. A multi-agent loan pipeline, for example, could have this underwriting agent run first, write its verdict to state via `output_key`, and a subsequent approval agent read it from `session.state["latest_credit_assessment"]` without the two agents ever knowing about each other's internals.
 
-> 📌**NOTE:** You won't be able to observe `output_key` in action through `adk web` in this lesson, since we haven't introduced the `Runner` and `SessionService` objects that give you direct access to session state yet. Lesson 6a covers those in detail. Once you reach Lesson 6a, you can come back to this agent, add `output_key` as shown above, and verify it with a line like `print(updated_session.state.get("latest_credit_assessment"))` in your `main.py` loop. We mention it here because it belongs conceptually with `output_schema`, its natural companion.
+## Observing the session state in adk web
+
+Here's how you'll be able to see the updated session state, but you'll have to run the agent in `adk web` only!
+
+* Add the `output_key` line to the Agent and run this agent in `adk web` as shown earlier 
+* Enter any one of the prompts we entered earlier and wait for the response.
+* In the left panet click the tab labeled "State" and you should see the `latest_credit_assessment` key with the same values as those retuerned.
+
+For instance, my `adk web` run shows something like for the following prompt we entered earlier:
+
+```
+Applicant has a monthly income of 150,000, existing monthly debt payments of 30,000 including the new loan, 8 years at their current employer, and no missed payments on record.
+```
+
+![Structured Output with Output Key](images/structured_outputs_output_key.png)
 
 ## If you're coming from LangChain or LangGraph
 
