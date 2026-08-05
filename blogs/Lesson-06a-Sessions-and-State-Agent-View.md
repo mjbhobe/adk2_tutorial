@@ -4,17 +4,19 @@ Up until now, every lesson has run through `adk run` or `adk web`. Both are genu
 
 So we're taking the training wheels off. We won't be using `adk run` or `adk web` to test our agent. Instead, we'll write a `main.py` script that builds the three objects powering every single ADK conversation: the `SessionService`, the `Session`, and the `Runner`. Understanding this code is what separates someone who's been testing prompts in a CLI from someone who can build and deploy a real agent backend. And it's also the only way to show you something `adk run`/`adk web` can't: a session that arrives already knowing who it's talking to, the way a real production system would hand one off to an Agent.
 
+![Sessions and State - Agent View](images/sessions_and_state_agent_view.png)
+
 ## The problem we're solving
 
 A bank's priority support desk doesn't start every call from zero. By the time a Platinum-tier customer's call reaches an assistant, whether that assistant is human or an agent, the bank's CRM system has already identified who's calling, what tier they're in, and who their relationship manager is. A good support experience uses that context from the very first word, greeting the customer by name rather than asking them to identify themselves, and treating a Platinum customer's request differently than a Standard one, without being told to on every single call.
 
-That's a genuinely different shape of problem than anything so far in this series. It's not about a tool fetching data mid-conversation, and it's not about the agent slowly building up facts over several turns. It's about context that exists *before the conversation starts*, handed to the agent by whatever system routed the call there. `adk run` and `adk web` give you no clean way to pre-load a session like that; they always start you from an empty one. To do this properly, you need to create the session yourself.
+That's a genuinely different shape of problem than anything so far in this series. It's not about a tool fetching data mid-conversation, and it's not about the agent slowly building up facts over several turns. It's about *context that exists **before** the conversation starts*, handed to the agent by whatever system routed the call there. `adk run` and `adk web` give you no clean way to pre-load a session like that; they always start you from an empty one. To do this properly, you need to create the session yourself.
 
 ## The three objects behind every ADK conversation
 
 **`SessionService`** is the component responsible for actually storing and retrieving sessions. There are two variants: an `InMemorySessionService`, which we're using in this lesson, keeps everything in memory for the life of the process and forgets it the moment the process exits; and a `DatabaseSessionService` which is the production-shaped alternative, backed by a real database via SQLAlchemy, so sessions survive restarts and can be shared across multiple running instances of your application. Swapping which service you use is a one-line change in code; nothing about how you talk to a session changes based on which one is backing it. In production, you'll almost always use `DatabaseServiceSession`.
 
-**`Session`** is one specific conversation: its message history (the back-and-forth conversations) and its state (a dict object of key & value pairs), the same state you'll read and write in this lesson. A `SessionService` can hold many sessions at once, for many different users; a `Session` is exactly one of them.
+**`Session`** is one specific conversation: its message history (the back-and-forth conversations) and its state (a `dict` object of key & value pairs), the same state you'll read and write in this lesson. A `SessionService` can hold many sessions at once, for many different users; a `Session` is exactly one of them.
 
 **`Runner`** is what actually executes one turn of a conversation. Hand it a session, an agent, and a new message, and it drives the full exchange: sending the conversation to the model, running any tool the model asks for, applying callbacks, and doing this as many times in a row as the model needs before it's ready to give a final answer. `adk run` and `adk web` have been building a `Runner` for you, invisibly, on every message you've ever sent them.
 
@@ -30,7 +32,15 @@ Ok, enough theory 🥱! Let's code our agent, shall we?
 
 ## Step 1: Build the priority support agent
 
-Starting with this lesson, every `main.py`-driven example in this series keeps its own lesson folder self-contained: the driving script and every agent it uses live together under one folder in `agents/`. 
+Starting with this lesson, every `main.py`-driven example in this series keeps its own lesson folder self-contained: the driving script and every agent it uses live together under one folder under `agents/`, such as `lesson06a_sessions_and_state`. The `main.py` file resides in this folder. All agents used by `main.py` have their own dedicated sub-folder under the folder where `main.py` resides. Following tree structure shows the outline of our project.
+
+```
+agents/lesson06a_sessions_and_state/
+       ├──  main.py
+       └── priority_support/
+            ├──  __init__.py
+            └── agent.py
+```
 
 Create the structure:
 

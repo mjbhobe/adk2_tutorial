@@ -50,8 +50,14 @@ def submit_and_check_document(
     seed = int(digest[:8], 16)
 
     passed = (seed % 3) != 0  # roughly 2 in 3 attempts pass, independently each time
+    print("DEBUG passed:", passed)
 
     if passed:
+        print(
+            "[DEBUG] (submit_and_check_document tool) escalate set:",
+            tool_context.actions.escalate,
+        )
+        tool_context.actions.escalate = True
         return {"attempt_number": attempt_number, "passed": True}
 
     issues = [
@@ -61,7 +67,6 @@ def submit_and_check_document(
     ]
 
     # signal to ADK to exit loop
-    tool_context.actions.escalate = True
     return {
         "attempt_number": attempt_number,
         "passed": False,
