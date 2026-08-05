@@ -19,7 +19,7 @@ from google.adk.models.anthropic_llm import AnthropicLlm
 # Flip this to True to run the exact same agent on Gemini Flash instead
 # of Claude Haiku. Both API keys are already available from the
 # project's root .env file!
-USE_GEMINI_FLASH = False
+USE_GEMINI_FLASH = True
 
 AGENT_INSTRUCTION = (
     "You are a friendly, knowledgeable assistant for a retail bank's "
@@ -33,9 +33,11 @@ AGENT_INSTRUCTION = (
 )
 
 if USE_GEMINI_FLASH:
-    model = "gemini-flash-latest"
+    model = "gemini-3.5-flash-lite"
 else:
     model = AnthropicLlm(model="claude-haiku-4-5-20251001")
+
+print(f"NOTE: we are using the {model} model")
 
 # NOTE: the "main" agent must be assigned to a variable called root_agent (case sensitive)
 # This application uses just one agent, so it may not make much sense now. Will be clear when

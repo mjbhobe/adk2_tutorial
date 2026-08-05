@@ -51,7 +51,7 @@ AGENT_INSTRUCTION = (
 )
 
 if USE_GEMINI_FLASH:
-    model = "gemini-flash-latest"
+    model = "gemini-3.5-flash-lite"
 else:
     model = AnthropicLlm(model="claude-haiku-4-5-20251001")
 
@@ -85,7 +85,7 @@ Before we move on, it's worth knowing what each of these four arguments controls
 
 ## A caveat worth knowing: Claude and Gemini aren't resolved the same way
 
-Notice that Gemini gets passed in as a plain string (`"gemini-flash-latest"`), but Claude gets wrapped in an `AnthropicLlm(...)` object instead of a string like `"claude-haiku-4-5-20251001"`. This isn't a style choice, it's necessary, and it's worth understanding so it doesn't trip you up later.
+Notice that Gemini gets passed in as a plain string (`"gemini-3.5-flash-lite"`), but Claude gets wrapped in an `AnthropicLlm(...)` object instead of a string like `"claude-haiku-4-5-20251001"`. This isn't a style choice, it's necessary, and it's worth understanding so it doesn't trip you up later.
 
 When you give ADK a plain model name string, it looks the name up against a set of built-in patterns to decide which provider to use. Gemini names resolve straight to ADK's native Gemini support, no extra step needed. Claude names, if left as a plain string, resolve to a version of Claude meant to run through Google Cloud's Vertex AI, which expects a GCP project to be configured. Since we're using a direct Anthropic API key instead, a bare Claude string would fail with a configuration error. Wrapping it in `AnthropicLlm(...)` sidesteps that entirely and talks to Anthropic directly, using the `ANTHROPIC_API_KEY` you already set in `.env`. You'll use this same pattern every time you reach for Claude in this series.
 

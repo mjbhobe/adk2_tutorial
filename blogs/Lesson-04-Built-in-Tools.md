@@ -12,8 +12,8 @@ We're going to build a market briefing agent that handles both: live prices via 
 Add the dependency, by running the following commands on a terminal from the project root folder.
 
 ```bash
-# ensure your uv environment is active
-source .venv/bin/activate # or .venv\Scripts\activate on Windows
+# activate your local environment
+source .venv/bin/activate 
 # add the yfinance module
 uv add yfinance
 ```
@@ -95,7 +95,7 @@ def get_stock_price(ticker: str) -> dict:
 
 This returns a dict with a `found` flag and either the data or an error message, rather than letting an exception escape. That matters specifically for tool functions: if this raised an uncaught exception on a bad ticker, the whole agent turn would fail. Returning a structured "not found" result instead lets the model see what went wrong and respond sensibly, for example by asking the customer to double check the ticker symbol.
 
-> 📌**NOTE:** Every tool function in this series returns a dict, and it's worth knowing why, since it's not an arbitrary style choice. 
+> 📌**NOTE:** Every tool function in this series returns a `dict`, and it's worth knowing why, since it's not an arbitrary style choice.
 >
 > The underlying **function-calling spec** that Gemini, Claude, and most providers share **requires a tool's result to reach the model as a dict-shaped payload**. ADK enforces this at the framework level: if a tool returns anything other than a `dict` shaped result, for example a plain string, a number, a list, then ADK will automatically wrap it into `{"result": <value>}` dict before sending it back, so returning a non-dict wouldn't actually break anything.
 >
@@ -103,7 +103,9 @@ This returns a dict with a `found` flag and either the data or an error message,
 
 Notice too that `get_stock_price` uses `stock.history()` rather than `stock.info` as the primary source for the price itself. Yahoo Finance's `.info` endpoint is known to be less reliable and more prone to rate-limiting than the historical-data endpoint, so we only fall back to `.info` for the company name, wrapped in its own `try/except` so a failure there doesn't take down the whole function.
 
-Now let's code the agent. Create `agents/lesson04_built_in_tools/agent.py`:
+Now let's code the agent. 
+
+Create `agents/lesson04_built_in_tools/agent.py`:
 
 ```python
 """Lesson 4: Built-in Tools 

@@ -152,7 +152,7 @@ models:
 
   fallback:
     provider: google
-    id: "gemini-flash-latest"
+    id: "gemini-3.5-flash-latest"
     use_when: "only when a feature requires it, e.g. built-in Google Search grounding or code execution, which do not work with non-Gemini models"
 
 # Per-lesson override example (lessons will add entries here as we go):
