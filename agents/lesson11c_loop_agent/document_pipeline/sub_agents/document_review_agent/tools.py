@@ -44,6 +44,9 @@ def submit_and_check_document(
                 short description of what went wrong.
     """
 
+    print(
+        f"submit_and_check_document tool -> applicant_name: {applicant_name}, aadhaar_number: {aadhaar_number}, attempt_number: {attempt_number}"
+    )
     digest = hashlib.sha256(
         f"{applicant_name}|{aadhaar_number}|{attempt_number}".encode()
     ).hexdigest()
@@ -58,8 +61,11 @@ def submit_and_check_document(
             tool_context.actions.escalate,
         )
         tool_context.actions.escalate = True
-        return {"attempt_number": attempt_number, "passed": True}
+        result = {"attempt_number": attempt_number, "passed": True}
+        tool_context.state["document_check_result"] = result
+        return result
 
+    tool_context.actions.escalate = False
     issues = [
         "Image too blurry to read",
         "Document appears expired",
@@ -67,11 +73,14 @@ def submit_and_check_document(
     ]
 
     # signal to ADK to exit loop
-    return {
+    result = {
         "attempt_number": attempt_number,
         "passed": False,
         "issue": issues[seed % len(issues)],
     }
+    tool_context.state["document_check_result"] = result
+    # print(f"submit_and_check_document tool returning: {result}")
+    return result
 
 
 def exit_document_loop(tool_context: ToolContext) -> dict:

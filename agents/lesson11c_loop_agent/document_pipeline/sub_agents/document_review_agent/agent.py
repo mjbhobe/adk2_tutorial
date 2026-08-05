@@ -59,7 +59,9 @@ commentary, just the fields the schema requires.
 
 document_review_agent = Agent(
     name="document_review_agent",
-    model=get_model("primary"),
+    # model=get_model("primary"),
+    # model=get_model("escalation"),
+    model="gemini-3.6-flash",
     description="Verifies an applicant's Aadhaar document, one attempt per turn, signaling exit once it passes.",
     instruction=instruction,
     # tools=[submit_and_check_document, exit_document_loop],
