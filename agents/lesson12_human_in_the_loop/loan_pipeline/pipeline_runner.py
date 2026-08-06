@@ -51,10 +51,10 @@ async def _drive_run(
     return paused
 
 
-async def _save_artifact_to_disk(user_id: str, filename: str) -> str:
+async def _save_artifact_to_disk(user_id: str, session_id: str, filename: str) -> str:
     """Pulls a saved artifact's bytes back out and writes them to a real file, so there's something to actually open."""
     part = await artifact_service.load_artifact(
-        app_name=APP_NAME, user_id=user_id, filename=filename
+        app_name=APP_NAME, user_id=user_id, session_id=session_id, filename=filename
     )
     output_dir = Path(__file__).resolve().parents[1] / "generated_documents"
     output_dir.mkdir(exist_ok=True)
@@ -215,7 +215,7 @@ async def submit_officer_decision(
     local_pdf_path = None
     if disbursement_result:
         local_pdf_path = await _save_artifact_to_disk(
-            user_id, disbursement_result["artifact_filename"]
+            user_id, session_id, disbursement_result["artifact_filename"]
         )
 
     return {
