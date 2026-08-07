@@ -12,8 +12,10 @@ No warranties or guarantees of any kind.
 """
 
 from google.adk.agents import Agent
-from google.adk.models.google_llm import Gemini
-from google.adk.tools.google_search_tool import GoogleSearchTool
+from google.adk.tools import google_search
+
+# from google.adk.models.google_llm import Gemini
+# from google.adk.tools.google_search_tool import GoogleSearchTool
 
 instruction = """You answer questions using Google Search. Search for
 what's needed, then give a short, direct answer based on what you find.
@@ -21,10 +23,9 @@ what's needed, then give a short, direct answer based on what you find.
 
 search_specialist_agent = Agent(
     name="search_specialist_agent",
-    # The one place in this series' policy that calls for Gemini: a
-    # built-in tool that requires it. Everything else stays on Claude.
-    model=Gemini(model="gemini-flash-latest"),
-    description="Answers questions using Google Search. Requires Gemini; cannot hold any other tool.",
+    # Google search forces us to use Gemini model
+    model="gemini-3.1-flash-lite",
+    description="Answers questions using Google Search.",
     instruction=instruction,
-    tools=[GoogleSearchTool()],
+    tools=[google_search],
 )

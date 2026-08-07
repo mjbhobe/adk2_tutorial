@@ -20,8 +20,9 @@ find it, then answer based on what it returns.
 
 root_agent = Agent(
     name="research_agent",
-    model=get_model("primary"),
+    model=get_model("primary"),  # Claude!
     description="Answers questions, using a Google Search specialist for anything needing current information.",
     instruction=instruction,
+    # which can now use google_search 😌
     tools=[AgentTool(agent=search_specialist_agent)],
 )

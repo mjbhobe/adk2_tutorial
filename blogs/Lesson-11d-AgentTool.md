@@ -1,16 +1,22 @@
 # Lesson 11d: AgentTool — Agents as Tools
 
-`SequentialAgent`, `ParallelAgent`, and `LoopAgent` all share one thing: the shape of the pipeline is fixed before you run it. You decide the order, or the branches, or the retry logic, in code, ahead of time. This lesson covers the one workflow mechanism where that's not true: `AgentTool`, which lets an agent's own model decide, at runtime, whether and which other agent to call.
+`GoogleSearchTool` only works with a Gemini model, no exceptions, no flag to work around it. If your agent runs on another LLM, such as Claude for instance, and you need Google Search alongside it, you're out of luck, unless you give the search step its own home, on its own model, and reach it the way you'd reach any other tool.
 
-## The problem we're solving
+The same shape of problem shows up around configuration, not just models. Picture an agent that scores a loan's risk, which needs a low temperature so the same inputs produce the same score every time, and also drafts a short, warm note to go with the approval letter, which reads better with a higher temperature and more freedom in phrasing. Both live under one agent's generation config, so you can't give one a low temperature and the other a high one, whichever setting you pick applies to every turn that agent takes. Giving the note-writing step its own agent, with its own config, is the only way to let each task have the settings it actually needs. Generation config lives on the whole agent, not per tool call.
 
-Two separate situations, both real, that none of the last three lessons can handle.
+Then there's a genuinely different kind of problem, and it's the same limitation `SequentialAgent`, `ParallelAgent`, and `LoopAgent` all share: the shape of the pipeline is fixed before you run it, decided in code, ahead of time. None of them can decide, mid-run, that a customer message asking about a balance needs one specialist while a message reporting a stolen card needs a completely different one. `SequentialAgent` can't skip a step. `ParallelAgent` runs everything. `LoopAgent` repeats one thing. That kind of routing needs a model to decide, at the moment it matters, not a fixed sequence.
 
-**First**: some tools have requirements that clash with the rest of your agent. `GoogleSearchTool` only works with a Gemini model, and it can't share an agent with any other tool at all, that's a hard platform rule, not a style choice. If your agent is built on Claude and also needs one other tool, you can't just add `GoogleSearchTool` to the list.
+A few more reasons show up once you're building for real rather than for a lesson. Giving a specialist its own tool list, separate from your main agent's, keeps that specialist's internal retries and multiple tool calls out of your main agent's context, so it stays smaller and cleaner. Splitting fifteen tools across three specialists, each exposed as one callable unit, gives your top-level agent three choices instead of fifteen, and fewer choices means fewer wrong picks. An entire finished pipeline, like Lesson 11a's four-step loan underwriting flow, can be handed to something bigger as a single callable unit, without whatever's calling it needing to know it's actually four steps underneath. And an agent you didn't write yourself, something imported from elsewhere, or reached over the network through Lesson 15's A2A protocol, can be folded into your own workflow without touching its internals at all, your own agent captures its output on your own terms, through your own instruction and your own state, rather than modifying code you don't control.
 
-**Second**: sometimes which specialist should handle a request depends on what the request actually says, and you don't know that in advance. A customer support message asking about their balance needs one specialist; a message reporting a stolen card needs a completely different one. There's no fixed order here, no "always run both", it's a judgment call, and only a model can make it.
+Every one of these is a different problem. They all lead to the same answer: something that decides, or something you can't or won't modify, needs to be reachable the way a tool is reachable, called when it's actually needed, not wired into a fixed sequence ahead of time. That's what `AgentTool` is for.
 
-`AgentTool` solves both: it wraps a whole agent so it can be added to another agent's `tools` list, exactly like a Python function would be. The calling agent's model decides when to call it, the same way it decides when to call any other tool.
+## What this lesson builds
+
+Two of these, chosen because they sit at opposite ends of "why": one is a hard constraint you can't avoid, the other is a judgment call only a model can make.
+
+**Platform-forced**: a research agent that needs Google Search alongside its own reasoning, where the search step itself has to run on Gemini even though everything else in this series runs on Claude.
+
+**Routing**: a customer support agent that has to decide, per message, whether a balance inquiry or a card block is what's actually being asked for, and call the right specialist, not both.
 
 ## How it works
 
@@ -24,24 +30,9 @@ root_agent = Agent(
 )
 ```
 
-That's the whole mechanism. `some_specialist_agent` can be any agent, its own model, its own instruction, its own tools, completely independent of the orchestrator. Once wrapped, it shows up to the orchestrator's model as one more tool it can choose to call, with a description drawn from the specialist agent itself.
+That's the whole mechanism. `some_specialist_agent` can be any agent, its own model, its own instruction, its own tools, completely independent of the orchestrator. Once wrapped, it shows up to the orchestrator's model as one more tool it can choose to call, with a description drawn from the specialist agent itself. Under the hood, `AgentTool` runs the wrapped agent in its own isolated sub-run, with its own session and its own model, only the final result comes back to the caller. That isolation is exactly why the wrapped agent's model never has to match the caller's.
 
-> **NOTE:** `AgentTool` isn't deprecated, unlike `SequentialAgent`, `ParallelAgent`, and `LoopAgent`. It's a separate, still-current mechanism. ADK does offer a newer, shorter way to write the same thing, setting `mode="single_turn"` on the specialist and adding it to the orchestrator's `sub_agents` list instead of `tools`, and letting ADK wrap it automatically. Under the hood that's the same `AgentTool` machinery, just less to type. This lesson uses the explicit form because it's clearer about what's actually happening.
-
-## When to reach for it, and when not to
-
-Two situations force your hand:
-
-- **A built-in tool needs a different model, or can't share an agent with anything else.** `GoogleSearchTool` is this lesson's example, but the shape generalizes to any tool with its own model or isolation requirement.
-- **A sub-task genuinely needs different generation settings than the rest of the agent**, a different temperature, a different safety configuration, something that lives on the agent as a whole, not per tool call.
-
-A few more situations don't force you into it, but make it the right call:
-
-- **Routing that has to be decided by a model**, this lesson's second example, and the one that doesn't fit `SequentialAgent`, `ParallelAgent`, or `LoopAgent` at all.
-- **Keeping a specialist's internal back-and-forth out of the caller's context.** Whatever the specialist does internally, retries, several tool calls, stays inside its own turn. The caller just sees one tool call and one result.
-- **Cutting down how many tools one agent has to choose between.** Grouping many tools into a few specialist agents, each exposed as one `AgentTool`, gives the top-level agent fewer, clearer choices.
-- **Reuse across agents that aren't part of the same pipeline.** A `SequentialAgent`'s sub-agents can only belong to one parent. An `AgentTool` doesn't have that restriction, several unrelated orchestrators can each wrap the same specialist behavior independently.
-- **Treating an entire existing pipeline as one callable unit.** You can wrap a whole `SequentialAgent` in an `AgentTool` just as easily as a single `Agent`:
+Wrapping a whole existing pipeline works the same way, no different mechanism, just a different kind of agent going in:
 
 ```python
 from google.adk.tools.agent_tool import AgentTool
@@ -52,7 +43,7 @@ underwriting_tool = AgentTool(agent=loan_underwriting_pipeline)
 
 Three lines, and Lesson 11a's entire four-step pipeline becomes one tool call from something bigger.
 
-None of this is the right call when the order or the branches are actually known in advance, that's still `SequentialAgent`, `ParallelAgent`, or `LoopAgent`. `AgentTool` earns its place specifically where a model has to decide.
+None of this is the right call when the order or the branches are actually known in advance, that's still `SequentialAgent`, `ParallelAgent`, or `LoopAgent`. `AgentTool` earns its place specifically where something has to decide, or where you're working with an agent you don't control.
 
 ## Step 1: Set up the folder structure
 
@@ -88,24 +79,19 @@ agents/lesson11d_agent_tool/
 
 ## Step 2: Build the search specialist
 
+Create `agents/lesson11d_agent_tool/research_pipeline/sub_agents/search_specialist_agent/agent.py`
+
 ```python
-# agents/lesson11d_agent_tool/research_pipeline/sub_agents/search_specialist_agent/agent.py
 """Lesson 11d: Search specialist agent, Gemini-only by platform requirement.
 
 GoogleSearchTool only works with a Gemini model, and it can't share an
 agent with any other tool. This agent exists purely to hold that one
 tool in isolation; the orchestrator that actually talks to the user
 stays on Claude and reaches this agent through an AgentTool.
-
-@author: Manish Bhobé
-My experiments with Python, Agentic AI and ADK.
-Code shared for learning purposes only! Use at your own risk.
-No warranties or guarantees of any kind.
 """
 
 from google.adk.agents import Agent
-from google.adk.models.google_llm import Gemini
-from google.adk.tools.google_search_tool import GoogleSearchTool
+from google.adk.tools import google_search
 
 instruction = """You answer questions using Google Search. Search for
 what's needed, then give a short, direct answer based on what you find.
@@ -113,27 +99,21 @@ what's needed, then give a short, direct answer based on what you find.
 
 search_specialist_agent = Agent(
     name="search_specialist_agent",
-    # The one place in this series' policy that calls for Gemini: a
-    # built-in tool that requires it. Everything else stays on Claude.
-    model=Gemini(model="gemini-flash-latest"),
-    description="Answers questions using Google Search. Requires Gemini; cannot hold any other tool.",
+    # GoogleSearch forces us to use Gemini model
+    # model=Gemini(model="gemini-flash-latest"),
+    model="gemini-3.5-flash-lite",
+    description="Answers questions using Google Search.",
     instruction=instruction,
-    tools=[GoogleSearchTool()],
+    tools=[google_search],
 )
 ```
 
-This agent does exactly one thing and holds exactly one tool. That's not a stylistic choice, it's the constraint `GoogleSearchTool` imposes: one tool, one model, nothing else in the list.
-
 ## Step 3: Build the research agent
 
-```python
-# agents/lesson11d_agent_tool/research_pipeline/agent.py
-"""Lesson 11d: Research agent, Claude, with a Gemini specialist wrapped as a tool.
+Create `agents/lesson11d_agent_tool/research_pipeline/agent.py`
 
-@author: Manish Bhobé
-My experiments with Python, Agentic AI and ADK.
-Code shared for learning purposes only! Use at your own risk.
-No warranties or guarantees of any kind.
+```python
+"""Lesson 11d: Research agent, Claude, with a Gemini specialist wrapped as a tool.
 """
 
 from google.adk.agents import Agent
@@ -150,25 +130,22 @@ find it, then answer based on what it returns.
 
 root_agent = Agent(
     name="research_agent",
-    model=get_model("primary"),
+    model=get_model("primary"), # Claude!
     description="Answers questions, using a Google Search specialist for anything needing current information.",
     instruction=instruction,
+    # which can now use google_search 😌
     tools=[AgentTool(agent=search_specialist_agent)],
 )
 ```
 
-`root_agent` stays on Claude, the model this whole series defaults to. It never touches `GoogleSearchTool` directly, from its point of view, it just has a tool called `search_specialist_agent` that happens to answer questions.
+Our `root_agent` stays on Claude, which is our preferred model. It never touches `GoogleSearchTool` directly, from its point of view, it just has a tool called `search_specialist_agent` that happens to answer questions.
 
 ## Step 4: Build the two support specialists
 
-```python
-# agents/lesson11d_agent_tool/support_pipeline/sub_agents/balance_inquiry_agent/tools.py
-"""Lesson 11d: Tools for the balance inquiry agent.
+Create tool for balance inquiry agent - `agents/lesson11d_agent_tool/support_pipeline/sub_agents/balance_inquiry_agent/tools.py`
 
-@author: Manish Bhobé
-My experiments with Python, Agentic AI and ADK.
-Code shared for learning purposes only! Use at your own risk.
-No warranties or guarantees of any kind.
+```python
+"""Lesson 11d: Tools for the balance inquiry agent.
 """
 
 import hashlib
@@ -193,14 +170,10 @@ def get_account_balance(account_number: str) -> dict:
     return {"account_number": account_number, "balance": float(seed % 500000)}
 ```
 
-```python
-# agents/lesson11d_agent_tool/support_pipeline/sub_agents/balance_inquiry_agent/agent.py
-"""Lesson 11d: Balance inquiry agent, one of two specialists behind the router.
+Create the balance inquiry agent - `agents/lesson11d_agent_tool/support_pipeline/sub_agents/balance_inquiry_agent/agent.py`
 
-@author: Manish Bhobé
-My experiments with Python, Agentic AI and ADK.
-Code shared for learning purposes only! Use at your own risk.
-No warranties or guarantees of any kind.
+```python
+"""Lesson 11d: Balance inquiry agent, one of two specialists behind the router.
 """
 
 from google.adk.agents import Agent
@@ -222,14 +195,10 @@ balance_inquiry_agent = Agent(
 )
 ```
 
-```python
-# agents/lesson11d_agent_tool/support_pipeline/sub_agents/card_block_agent/tools.py
-"""Lesson 11d: Tools for the card block agent.
+Create tool for card block agent - `agents/lesson11d_agent_tool/support_pipeline/sub_agents/card_block_agent/tools.py`
 
-@author: Manish Bhobé
-My experiments with Python, Agentic AI and ADK.
-Code shared for learning purposes only! Use at your own risk.
-No warranties or guarantees of any kind.
+```python
+"""Lesson 11d: Tools for the card block agent.
 """
 
 
@@ -251,14 +220,10 @@ def block_card(card_number: str, reason: str) -> dict:
     return {"card_number": card_number, "reason": reason, "status": "blocked"}
 ```
 
-```python
-# agents/lesson11d_agent_tool/support_pipeline/sub_agents/card_block_agent/agent.py
-"""Lesson 11d: Card block agent, the other specialist behind the router.
+Create the card block agent - `agents/lesson11d_agent_tool/support_pipeline/sub_agents/card_block_agent/agent.py`
 
-@author: Manish Bhobé
-My experiments with Python, Agentic AI and ADK.
-Code shared for learning purposes only! Use at your own risk.
-No warranties or guarantees of any kind.
+```python
+"""Lesson 11d: Card block agent, the other specialist behind the router.
 """
 
 from google.adk.agents import Agent
@@ -285,14 +250,12 @@ Nothing new in either of these on their own, they're the same shape as any singl
 
 ## Step 5: Build the router
 
-```python
-# agents/lesson11d_agent_tool/support_pipeline/agent.py
-"""Lesson 11d: Customer support agent, routes between two specialists at runtime.
+This is a very simple router, which supports only balance inquiry & card-blocking requests. Depending on the request (in text) coming into this agent, it uses its `AgentTool` tools to route to the correct sub-agent that can handle the request.
 
-@author: Manish Bhobé
-My experiments with Python, Agentic AI and ADK.
-Code shared for learning purposes only! Use at your own risk.
-No warranties or guarantees of any kind.
+Create `agents/lesson11d_agent_tool/support_pipeline/agent.py`
+
+```python
+"""Lesson 11d: Customer support agent, routes between two specialists at runtime.
 """
 
 from google.adk.agents import Agent
@@ -317,7 +280,9 @@ root_agent = Agent(
     description="Routes customer banking requests to the right specialist.",
     instruction=instruction,
     tools=[
+        # balance inquiry handled by balance inquiry Agent masquerading as a tool
         AgentTool(agent=balance_inquiry_agent),
+        # card blocks handled by card block Agent masquerading as a tool
         AgentTool(agent=card_block_agent),
     ],
 )
@@ -327,14 +292,10 @@ Two `AgentTool`s in one list. Compare this to `disbursement_agent` and `referral
 
 ## Step 6: Wire up main.py
 
-```python
-# agents/lesson11d_agent_tool/main.py
-"""Lesson 11d: Run both AgentTool examples.
+Create `agents/lesson11d_agent_tool/main.py`
 
-@author: Manish Bhobé
-My experiments with Python, Agentic AI and ADK.
-Code shared for learning purposes only! Use at your own risk.
-No warranties or guarantees of any kind.
+```python
+"""Lesson 11d: Run both AgentTool examples.
 """
 
 import asyncio
@@ -420,7 +381,10 @@ if __name__ == "__main__":
 
 ## Step 7: Run it
 
+Run the following commands from the project root (`adk2_tutorial`) in a new terminal.
+
 ```bash
+source .venv/bin/activate
 uv run agents/lesson11d_agent_tool/main.py
 ```
 
@@ -449,8 +413,6 @@ Both `lesson11d_agent_tool.research_pipeline` and `lesson11d_agent_tool.support_
 ## If you're coming from LangChain or LangGraph
 
 This maps closely to what LangChain calls tool-calling agents with sub-agents as tools, or in LangGraph terms, a supervisor node that routes to worker nodes based on the model's own output rather than a fixed edge. The idea is common across every agent framework for exactly the reason it shows up here: some routing decisions can't be known ahead of time, so something has to make the call at runtime, and a model is the natural thing to make it.
-
-> **NOTE:** Earlier in this lesson, the `mode="single_turn"` shorthand was mentioned as a shorter way to write what `AgentTool` does explicitly. Worth being precise about what that is and isn't: it's unrelated to ADK's graph-based `Workflow` class, covered later in this series. Same field name, `mode`, different purpose, `single_turn` wraps an agent as a tool, exactly what this lesson built by hand. `Workflow` is a separate, larger orchestration primitive with its own reasons to exist.
 
 ## In this lesson
 

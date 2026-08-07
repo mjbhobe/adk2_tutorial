@@ -15,7 +15,9 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # adds agents/ for common.*
+sys.path.insert(
+    0, str(Path(__file__).resolve().parents[1])
+)  # adds agents/ for common.*
 
 from google.adk.sessions import InMemorySessionService
 
