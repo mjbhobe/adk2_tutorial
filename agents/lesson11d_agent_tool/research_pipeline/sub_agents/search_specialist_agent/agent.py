@@ -24,7 +24,7 @@ what's needed, then give a short, direct answer based on what you find.
 search_specialist_agent = Agent(
     name="search_specialist_agent",
     # Google search forces us to use Gemini model
-    model="gemini-3.1-flash-lite",
+    model="gemini-3.5-flash-lite",
     description="Answers questions using Google Search.",
     instruction=instruction,
     tools=[google_search],

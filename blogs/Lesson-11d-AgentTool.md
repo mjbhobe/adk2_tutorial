@@ -1,6 +1,6 @@
 # Lesson 11d: AgentTool — Agents as Tools
 
-`GoogleSearchTool` only works with a Gemini model, no exceptions, no flag to work around it. If your agent runs on another LLM, such as Claude for instance, and you need Google Search alongside it, you're out of luck, unless you give the search step its own home, on its own model, and reach it the way you'd reach any other tool.
+`GoogleSearchTool` only works with a Gemini model, no exceptions, no flag to work around it. If your agent runs on another LLM, such as Claude, and you need Google Search alongside it, you're out of luck, unless you give the search step its own home, on its own model, and reach it the way you'd reach any other tool.
 
 The same shape of problem shows up around configuration, not just models. Picture an agent that scores a loan's risk, which needs a low temperature so the same inputs produce the same score every time, and also drafts a short, warm note to go with the approval letter, which reads better with a higher temperature and more freedom in phrasing. Both live under one agent's generation config, so you can't give one a low temperature and the other a high one, whichever setting you pick applies to every turn that agent takes. Giving the note-writing step its own agent, with its own config, is the only way to let each task have the settings it actually needs. Generation config lives on the whole agent, not per tool call.
 
