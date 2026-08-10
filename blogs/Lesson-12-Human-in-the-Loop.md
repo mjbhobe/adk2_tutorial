@@ -2,6 +2,8 @@
 
 Every pipeline you've built so far, `SequentialAgent` in 11a, `ParallelAgent` in 11b, `LoopAgent` in 11c, decides everything on its own once you press go. This lesson builds a pipeline that stops and genuinely waits for a person, a loan officer, to make a real decision before continuing, from a console prompt or a web page, using the same mechanism either way.
 
+![Human in the Loop](images/Human-in-the-loop.png)
+
 ## The problem we're solving
 
 A loan application comes in. A `credit_agent` pulls the applicant's details and credit bureau report. A `risk_agent` scores it. Then, instead of an agent deciding approve or reject the way Lesson 11a's decision agent did, the pipeline stops. It shows everything it's found to a loan officer and waits, for as long as it takes, before doing anything else. Once the officer responds with APPROVE, REJECT, or REFER, the pipeline continues: approval generates a PDF loan offer letter, referral writes up a note for a senior underwriter, rejection does neither.
