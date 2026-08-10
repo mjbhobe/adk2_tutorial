@@ -2,15 +2,15 @@
 
 A Skill packages knowledge or procedure, not code an agent always carries, so it can be discovered and pulled in only when actually relevant, rather than bloating every agent's instruction with guidance most conversations never touch. You reach for one when a capability is genuinely optional per conversation, checking a PAN, calculating an EMI, something an agent shouldn't need to know about by default but should be able to find and use the moment it's needed.
 
-Quick recap: a Skill is a `SKILL.md` file, required `name` and `description`, an optional instructions body, and optional `references/`, `assets/`, and `scripts/` folders, loaded in layers so an agent only pays for what it actually decides to use. `SkillToolset` gives an agent four tools of its own, list, load, load a resource, run a script, and the model decides when to reach for each. The theory lesson also confirmed something worth actually seeing work, not just reading about: a Skill, a plain function tool, and an `AgentTool` can all sit on the same agent at once, resolved together with no special handling. This lesson builds both skill flavors, plus that full combination, for real.
+Quick recap from previous lesson: a Skill is a `SKILL.md` file, required `name` and `description`, an optional instructions body, and optional `references/`, `assets/`, and `scripts/` folders, loaded in layers so an agent only pays for what it actually decides to use. `SkillToolset` gives an agent four tools of its own, list, load, load a resource, run a script, and the model decides when to reach for each. A Skill, a plain function tool, and an `AgentTool` can all sit on the same agent at once, resolved together with no special handling. Skills come in two _flavors_ - an `Instructions-only` skill and a `Scripted` skill. In this lesson we build both flavors of skills.
 
 ## The problem we're solving
 
 The loan support desk needs three different kinds of capability, and they don't all belong in the same place.
 
-**Procedure**: checking a PAN and pulling a credit report, or calculating an exact EMI, needs no dedicated agent of its own, just guidance and, for the EMI, a real script. That's what Skills are for.
+**Procedure**: checking a PAN and pulling a credit report, or calculating an exact EMI, needs no dedicated agent of its own, just guidance and, for the EMI, a real script. That's what Skills are for, and that's exactly how we'll code them.
 
-**Judgment**: a full risk assessment, credit score plus affordability plus default history combined into a score and a band, is a heavier task than a quick lookup, worth its own dedicated agent turn with its own instruction. That's what `AgentTool` is for.
+**Judgment**: a full risk assessment, credit score plus affordability plus default history combined into a score and a band. This is a _much heavier_ task than a quick lookup. So it's worth dedicating a separate agent for this - one with it's own LLM, instructions, tools etc. That's what `AgentTool` is for.
 
 **Something always needed, regardless of the other two**: every customer interaction gets logged for compliance, whether it touched a skill, the risk specialist, both, or neither. That's a plain tool, sitting directly in the agent's own list, not gated behind anything.
 
@@ -39,14 +39,49 @@ agents/lesson13a_skills/
                 └── calculate_emi.py
 ```
 
-Two things worth noticing before you build this. `credit_tools.py` sits at the `skills_demo/` level, not inside `pan-credit-check/`. That's deliberate: skill folders use kebab-case, the naming convention ADK's Skills format expects, and `pan-credit-check` isn't valid as a Python package name, you can't `import` a folder with a hyphen in it. A tool a skill wants to activate still has to be real, importable Python code, so it lives in your normal module structure, and the skill's frontmatter just references it by name. And `skills/` itself has no `__init__.py`, it's never imported as Python, `load_skill_from_dir` just reads it off disk as a plain filesystem path.
-
 `risk_specialist/` is its own small agent folder, the same shape you've used since Lesson 11a, since it's going to be wrapped in an `AgentTool` rather than loaded as a skill.
 
-## Step 2: Build the tools behind the instructions-only skill
+## Step 2: Write the instructions-only skill
+
+Create `agents/lesson13a_skills/skills_demo/skills/pan-credit-check/SKIILL.md` (**NOTE:** `SKILL.md` name is case-sensitive!)
+
+```markdown
+---
+name: pan-credit-check
+description: |
+  Validates an Indian PAN (Permanent Account Number) and fetches a mock
+  credit bureau report for that PAN. Use this whenever an agent needs
+  to check a PAN's format or look up an applicant's credit history.
+metadata:
+  adk_additional_tools:
+    - validate_pan_format
+    - get_credit_bureau_report
+---
+
+# PAN & Credit Check
+
+A PAN (Permanent Account Number) is India's tax ID, and the standard
+identity check for a financial application. A valid PAN is exactly 10
+characters: 5 uppercase letters, 4 digits, 1 uppercase letter, for
+example ABCDE1234F.
+
+When you need to check or use a PAN:
+
+1. Call `validate_pan_format` with the PAN as given. Never judge the
+   format yourself, always call the tool.
+2. If it's valid, and you also need the applicant's credit history,
+   call `get_credit_bureau_report` with the same PAN.
+3. If the format check fails, tell the caller the PAN is invalid and
+   why, don't attempt a credit check on an invalid PAN.
+```
+
+Notice that we have specified additional 2 functional tools via the `metadata.adk_additional_tools` list. This is what connects this skill to the two functional tools we'll implement next.
+
+## Step 3: Build the tools behind the instructions-only skill
+
+Create `agents/lesson13a_skills/skills_demo/credit_tools.py`
 
 ```python
-# agents/lesson13a_skills/skills_demo/credit_tools.py
 """Lesson 13a: Plain Python tools, activated by the pan-credit-check skill.
 """
 
@@ -109,49 +144,16 @@ def get_credit_bureau_report(pan_number: str) -> dict:
 
 Nothing new here, this is the same PAN check and credit bureau mock from 11a and 12. What's new is how it gets connected to the agent, which happens two steps from now, not through the agent's own `tools=[]` list directly.
 
-## Step 3: Write the instructions-only skill
-
-```markdown
----
-name: pan-credit-check
-description: |
-  Validates an Indian PAN (Permanent Account Number) and fetches a mock
-  credit bureau report for that PAN. Use this whenever an agent needs
-  to check a PAN's format or look up an applicant's credit history.
-metadata:
-  adk_additional_tools:
-    - validate_pan_format
-    - get_credit_bureau_report
----
-
-# PAN & Credit Check
-
-A PAN (Permanent Account Number) is India's tax ID, and the standard
-identity check for a financial application. A valid PAN is exactly 10
-characters: 5 uppercase letters, 4 digits, 1 uppercase letter, for
-example ABCDE1234F.
-
-When you need to check or use a PAN:
-
-1. Call `validate_pan_format` with the PAN as given. Never judge the
-   format yourself, always call the tool.
-2. If it's valid, and you also need the applicant's credit history,
-   call `get_credit_bureau_report` with the same PAN.
-3. If the format check fails, tell the caller the PAN is invalid and
-   why, don't attempt a credit check on an invalid PAN.
-
-Both tools return deterministic mock data for this lesson, the same
-result every time for a given PAN, standing in for a real government
-PAN registry and a real credit bureau.
-```
-
-Save this as `skills_demo/skills/pan-credit-check/SKILL.md`. The `metadata.adk_additional_tools` list is what actually connects this skill to the two functions from Step 2, it names them, it doesn't define them, the real Python functions get supplied separately when the agent's `SkillToolset` is built, in Step 5.
+So far we have implemented function tools in a `tools.py` file that was saved in the same folder as the `agent.py` file. By the same logic, our `credit_tools.py` file should sit in the same folder as `SKILL.md` file, but it can't! Skill folders use kebab-case (`-` separating parts of file name), the naming convention ADK's Skills format expects, and `pan-credit-check` isn't valid as a Python package name, you can't `import` a folder with a hyphen in it. A tool a skill wants to activate still has to be real, importable Python code, so it lives in your normal module structure, and the skill's frontmatter just references it by name. And `skills/` itself has no `__init__.py`, it's never imported as Python, `load_skill_from_dir` just reads it off disk as a plain filesystem path.
 
 ## Step 4: Build the scripted skill
 
+> ⚠️**Full disclosure**: EMI calculation doesn't strictly need to be a scripted skill. We've chosen to implement it as such purely to illustrate this other way of building one and not because EMI specifically demands it. Lesson 13 covered when a scripted skill actually earns its place over a plain function tool, and how common that really is in practice.
+
+Create `agents/lesson13a_skills/skills_demo/skills/emi-calculator/scripts/calculate_emi.py`
+
 ```python
 #!/usr/bin/env python3
-# agents/lesson13a_skills/skills_demo/skills/emi-calculator/scripts/calculate_emi.py
 """Lesson 13a: EMI calculator, run directly by the emi-calculator skill.
 
 This runs as a real subprocess when run_skill_script executes it, not
@@ -209,6 +211,8 @@ This is a plain, standalone CLI script, `argparse` and all. `run_skill_script` r
 
 Now the skill that documents it:
 
+Create `agents/lesson13a_skills/skills_demo/skills_demo/skills/emi-calculator/SKILL.md`
+
 ```markdown
 ---
 name: emi-calculator
@@ -237,19 +241,23 @@ The script prints a JSON object to stdout with the calculated `emi`.
 Read the EMI from that output, don't recompute it yourself.
 ```
 
-Save this as `skills_demo/skills/emi-calculator/SKILL.md`. Unlike `pan-credit-check`, there's no `metadata.adk_additional_tools` here, this skill doesn't activate any pre-written function, it tells the model how to invoke its own bundled script through `run_skill_script`.
+Unlike `pan-credit-check`, there's no `metadata.adk_additional_tools` here, this skill doesn't activate any pre-written function, it tells the model how to invoke its own bundled script through `run_skill_script`.
 
 ## Step 5: Build the risk specialist and the always-on logging tool
 
-The risk specialist is a small agent, the same shape as any single-purpose agent since Lesson 11a, not a skill:
+The risk specialist is a small agent, the same shape as any single-purpose agent since Lesson 11a, not a skill. We use our familiar structure for agent - `agent.py` and `tools.py` Python modules.
+
+Create the tools for the agent: `agents/lesson13a_skills/skills_demo/risk_specialist/tools.py`
 
 ```python
-# agents/lesson13a_skills/skills_demo/risk_specialist/tools.py
 """Lesson 13a: Tools for the risk specialist agent.
 """
 
-
-def calculate_emi(loan_amount: float, annual_rate: float, tenure_months: int) -> float:
+def calculate_emi(
+    loan_amount: float, 
+    annual_rate: float, 
+    tenure_months: int,
+) -> float:
     """Calculates the standard amortized EMI for a loan.
 
     Same reducing-balance formula used throughout this series.
@@ -323,8 +331,9 @@ def calculate_risk_score(
     }
 ```
 
+Create the agent `agents/lesson13a_skills/skills_demo/risk_specialist/agent.py`
+
 ```python
-# agents/lesson13a_skills/skills_demo/risk_specialist/agent.py
 """Lesson 13a: Risk specialist agent, wrapped as an AgentTool.
 
 A judgment task, not a quick lookup, worth its own dedicated agent
@@ -356,8 +365,9 @@ risk_specialist_agent = Agent(
 
 The always-on tool is much simpler, deliberately, since its whole point is that it's not gated behind anything:
 
+Create `agents/lesson13a_skills/skills_demo/support_tools.py`
+
 ```python
-# agents/lesson13a_skills/skills_demo/support_tools.py
 """Lesson 13a: An always-available tool, not gated behind any skill.
 """
 
@@ -389,8 +399,9 @@ def record_customer_query(query_summary: str, category: str) -> dict:
 
 ## Step 6: Wire up the demo agent
 
+Create `agents/lesson13a_skills/skills_demo/agent.py`
+
 ```python
-# agents/lesson13a_skills/skills_demo/agent.py
 """Lesson 13a: Demo agent combining a Skill, a plain tool, and an AgentTool.
 """
 
@@ -408,8 +419,10 @@ from .credit_tools import get_credit_bureau_report, validate_pan_format
 from .risk_specialist.agent import risk_specialist_agent
 from .support_tools import record_customer_query
 
+# set the path from where skills will be loaded
 SKILLS_DIR = Path(__file__).resolve().parent / "skills"
 
+# load the skills - will load only the L1 part
 pan_credit_check_skill = load_skill_from_dir(SKILLS_DIR / "pan-credit-check")
 emi_calculator_skill = load_skill_from_dir(SKILLS_DIR / "emi-calculator")
 
@@ -434,16 +447,19 @@ three kinds of capability available, not one:
 # Not something to point at untrusted input or run in production.
 root_agent = Agent(
     name="skills_demo_agent",
-    model=get_model("primary"),
+    model=get_model("primary"),  # Claude Haiku
     description="Handles loan support requests using skills, a risk specialist, and always-on query logging.",
     instruction=instruction,
     tools=[
+        # skills
         SkillToolset(
             skills=[pan_credit_check_skill, emi_calculator_skill],
             additional_tools=[validate_pan_format, get_credit_bureau_report],
             code_executor=UnsafeLocalCodeExecutor(),
         ),
+        # normal function tool
         record_customer_query,
+        # agent as tool
         AgentTool(agent=risk_specialist_agent),
     ],
 )
@@ -453,12 +469,11 @@ Three entries in `tools=[]`, three different kinds of thing. `SkillToolset` reso
 
 `code_executor` is what `run_skill_script` needs to exist at all, without it, `emi-calculator`'s script can't run.
 
-> **NOTE:** `UnsafeLocalCodeExecutor` runs scripts using Python's `multiprocessing` with the `spawn` start method, which has a real, easy-to-hit requirement: whatever script ultimately drives this agent needs a proper `if __name__ == "__main__":` guard around its entry point. `main.py`, below, already has one. If you ever call this agent from a script or notebook that doesn't, `spawn` will try to re-import your file as if it were the child process's own entry point, and you'll get a `RuntimeError` about bootstrapping, not a bug in this lesson's code, a real Python `multiprocessing` constraint worth knowing about before it surprises you somewhere else.
-
 ## Step 7: Wire up main.py
 
+This is our driver script. Create `agents/lesson13a_skills/main.py`
+
 ```python
-# agents/lesson13a_skills/main.py
 """Lesson 13a: Run the skills demo agent.
 """
 
@@ -519,7 +534,10 @@ Nothing skill-specific in here at all, `run_agent_query` doesn't know or care th
 
 ## Step 8: Run it
 
+Run the following command from our root folder (`adk2_tutorial`) in a new terminal.
+
 ```bash
+source .venv/bin/activate
 uv run agents/lesson13a_skills/main.py
 ```
 

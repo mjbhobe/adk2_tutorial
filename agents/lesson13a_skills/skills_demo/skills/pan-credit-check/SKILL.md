@@ -26,6 +26,3 @@ When you need to check or use a PAN:
 3. If the format check fails, tell the caller the PAN is invalid and
    why, don't attempt a credit check on an invalid PAN.
 
-Both tools return deterministic mock data for this lesson, the same
-result every time for a given PAN, standing in for a real government
-PAN registry and a real credit bureau.

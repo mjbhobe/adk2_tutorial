@@ -1,12 +1,16 @@
 # Lesson 13: Skills — Packaging and Reusing Agent Capabilities
 
-You've now got three ways to reuse agent behavior. `SequentialAgent`, `ParallelAgent`, and `LoopAgent` reuse a fixed shape of orchestration. `AgentTool`, from Lesson 11d, reuses a whole agent, its own model, its own instruction, its own tools, as one callable unit. This lesson covers a different kind of reuse: packaging knowledge and procedure, not agents, so any agent can pick it up on demand, without that knowledge being hardcoded into its instruction ahead of time.
+The ADK provided 2 ways to reuse agent behavior:
 
-## Why this exists: the gap a shared tools.py doesn't close
+1. `SequentialAgent`, `ParallelAgent`, and `LoopAgent` reuse a fixed shape of orchestration. 
+2. An `AgentTool` reuses a whole agent, its own model, its own instruction, its own tools, as one callable unit.
+3. And this lesson covers `Skills`, the 3rd kind of reuse: skills  package knowledge and procedure, not agents, so any agent can pick it up on demand, without that knowledge being hardcoded into its instruction ahead of time.
 
-Across 11a, 11b, and 12, PAN validation, the credit bureau mock, and the EMI formula got written fresh into each lesson's own `tools.py`. The obvious fix is a shared module, one `validate_pan_format` function, imported into every agent that needs it. That solves code duplication. It doesn't solve two other things:
+## Why Skills exist: the gap a shared tools.py doesn't close
 
-1. **Every agent still needs its own instruction text** explaining when and how to use that tool. The function is shared; the guidance around it isn't.
+Across lessons `11a`, `11b`, and `12`, PAN validation, the credit bureau mock, and the EMI formula got written fresh into each lesson's own `tools.py`. The obvious fix is a shared module, one `validate_pan_format` function, imported into every agent that needs it. That solves code duplication, but it doesn't solve two other things:
+
+1. **Every agent still needs its own instruction text** explaining when and how to use that tool. The function is shared but the guidance around it isn't.
 2. **A plain function tool has no "only when relevant" mode.** Once `validate_pan_format` is in an agent's `tools=[]` list, it's sent to the model as one of its available functions on *every single turn*, whether that conversation ever mentions a PAN or not. There's no way to say "this agent knows PAN validation exists, but only pulls in the real detail once a PAN actually shows up", a plain function tool is either in the list or it isn't.
 
 A Skill closes both gaps. The instructions live in one place, `SKILL.md`, not copied into every agent's own instruction. And they're discovered and loaded on demand, an agent with several skills available doesn't carry the full weight of all of them on every turn, only the ones it actually decides to use.
@@ -56,10 +60,9 @@ letter, e.g. ABCDE1234F...
 - **`allowed-tools`** (optional, experimental): a space-delimited list of tools pre-approved to run when this skill is active, part of the open `agentskills.io` spec this format follows.
 - **`metadata`** (optional): a free-form dict for anything client-specific. Two keys mean something to ADK specifically: `adk_additional_tools`, a list of tool names that should become available once this skill is loaded, drawn from whatever `SkillToolset` was given via its own `additional_tools` parameter; and `adk_inject_state`, which, set to `true`, lets the instructions body use `{var}` interpolation from session state, the same `{key}` / `{key?}` syntax you've used in agent instructions since Lesson 6a.
 
+The directory name (holding the `SKILL.md` file) _has to match_ `name` in the frontmatter exactly, `pan-validation/` for a skill named `pan-validation`. That's not a style convention, ADK's own loader raises an error if they don't match.
 
-The directory name has to match `name` in the frontmatter exactly, `pan-validation/` for a skill named `pan-validation`. That's not a style convention, ADK's own loader raises an error if they don't match.
-
-## Why it's split into layers
+## Why is it split into layers?
 
 The frontmatter and the body aren't loaded at the same time, and that's the actual point of a Skill, not an implementation detail.
 
@@ -67,9 +70,11 @@ The frontmatter and the body aren't loaded at the same time, and that's the actu
 - **L2**: the full markdown body, `SKILL.md`'s instructions. Only loaded once a specific skill actually looks relevant.
 - **L3**: anything in `references/`, `assets/`, or `scripts/`. Loaded later still, only if the instructions in L2 actually point at one of them.
 
-An agent that has ten skills available never pays the cost of all ten's full instructions on every turn, it sees ten short descriptions, decides which one or two are relevant to the request in front of it, and only pulls in the full detail for those.
+An agent that has ten skills available never pays the cost of all ten's full instructions on every turn, it sees ten short descriptions, decides which one or two or three are relevant to the request in front of it, and only pulls in the full detail for those.
 
-> **NOTE:** If you've used Claude, Claude Code, or Cowork's Skills feature, this format will look familiar, same idea of a `SKILL.md` file with layered detail. That's not a coincidence, but it's also not the same feature under a different name. ADK's Skills system is its own independent implementation, built around a shared open format (`agentskills.io`), not something wired into Anthropic's product surface. They converge on a similar shape because it's a good shape for this problem, not because one is built on top of the other.
+> 📌 **NOTE:** If you've used Claude, Claude Code, or Cowork's Skills feature, this format will look familiar, same idea of a `SKILL.md` file with layered detail. That's not a coincidence, but it's also not the same feature under a different name! 
+>
+> ADK's Skills system is its own independent implementation, built around a shared open format (`agentskills.io`), not something wired into Anthropic's product surface. They converge on a similar shape because it's a good shape for this problem, not because one is built on top of the other.
 
 ## How ADK wires this up
 
@@ -95,15 +100,33 @@ root_agent = Agent(
 
 The model decides when to call each of these, the same way it decides when to call any other tool. Nothing about a skill is force-fed into the conversation.
 
-## The two flavors
+## Where skills live in your project
+
+ADK has no opinion on this, no CLI flag scans a folder for skills, no shipped registry reads them off local disk, the one concrete `SkillRegistry` ADK ships, `GcpSkillRegistry`, is a *remote* registry, not a local filesystem convention. Wherever you point `load_skill_from_dir`, that's where a skill lives, ADK never goes looking on its own. Google's own shipped BigQuery skills follow this too, they sit inside the BigQuery tool's own package, next to the code that uses them, not in some project-wide skills directory.
+
+That leaves the actual placement decision to you, and two shapes make sense depending on scope:
+
+1. A skill specific to one agent belongs under that agent's own folder, alongside that agent's own code. Place it in a sub-folder of the folder holding the `agent.py` file.
+2. A skill genuinely reused across multiple agents belongs somewhere shared, `agents/common/skills/`, alongside this project's other shared code like `model_config.py` would make sense.
+
+Neither is enforced, both are just what makes sense for how widely a given skill actually gets used.
+
+## The two flavors of Skills
 
 **Instructions-only** is what `pan-validation` above looks like: `SKILL.md`, nothing in `scripts/`. The model loads the instructions, then does the actual work itself, reasoning through the steps, possibly calling its own separate function tools, following the guidance it just read.
 
-**Scripted** adds a `scripts/` folder with actual executable code. Instead of reasoning through, say, an EMI calculation by following written-out steps, the model can call `RunSkillScriptTool` and have the skill's own script compute the exact number deterministically, the same reasoning that's put every numeric formula in this series inside a Python tool rather than trusting a model to do arithmetic correctly.
+**Scripted** adds a `scripts/` folder with actual executable code. Instead of reasoning through a task by following written-out steps, the model can call `RunSkillScriptTool` and have the skill's own script do the work directly.
 
-## A real constraint worth understanding before you build the scripted example
+In practice, this is the less common of the two, and worth being upfront about that rather than implying it's an equal, everyday choice. Plain function tools, whether gated behind a skill's `adk_additional_tools` (see metadata in `Skills.md` file) or sitting bare in `tools=[]`, are the default reach for most logic, no subprocess, no `code_executor` to configure, nothing to sandbox, easier to test and maintain. 
 
-Running a script needs somewhere to actually execute it, that's the `code_executor` parameter on `SkillToolset`. ADK ships several:
+A scripted skill earns its place in a narrower set of situations:
+
+* The skill is meant to be shared or distributed outside your own codebase, to a team, a different project, possibly people not using ADK or Python at all!
+* The logic genuinely isn't Python, maybe a shell script or a compiled binary, or a task that needs real process isolation, something that could hang or crash without taking your agent's own process down with it. It also needs some sort of code executor to execute the script. 
+
+### A real constraint worth understanding before you build the scripted example
+
+Running a script needs somewhere to actually execute it, that's the `code_executor` parameter on `SkillToolset`. ADK ships several of these:
 
 - **`UnsafeLocalCodeExecutor`**: runs whatever code the model generates directly in your own Python process. Zero setup, no Docker, no cloud account, works the moment you install ADK.
 - **`ContainerCodeExecutor`**: runs code inside a Docker container, real isolation, needs Docker installed and configured.
@@ -141,14 +164,6 @@ root_agent = Agent(
 ```
 
 This isn't three competing mechanisms you have to pick one of, it's three tools an agent's own list can hold at the same time, resolved the same way regardless of which kind each one is. `13a`'s demo agent already does part of this, a `SkillToolset` sitting in a `tools=[]` list on its own, nothing else in the way.
-
-There's exactly one real restriction anywhere in this area, and Lesson 11d already covered it: `GoogleSearchTool` and `VertexAiSearchTool`, Gemini's own built-in grounding tools, refuse to share an agent with anything else by default, `AgentTool` or otherwise. That restriction has nothing to do with `AgentTool` or Skills specifically, it exists because those two tools aren't ordinary function-shaped tools at all, they're a special request type Gemini's own API handles differently, and mixing that with normal function declarations in the same request doesn't work. `AgentTool` and `SkillToolset` both resolve down to perfectly ordinary function-shaped tools by the time a model sees them, so neither one triggers that restriction, or has any restriction of its own, on Claude or on Gemini.
-
-## Where skills live in your project
-
-ADK has no opinion on this, no CLI flag scans a folder for skills, no shipped registry reads them off local disk, the one concrete `SkillRegistry` ADK ships, `GcpSkillRegistry`, is a *remote* registry, not a local filesystem convention. Wherever you point `load_skill_from_dir`, that's where a skill lives, ADK never goes looking on its own. Google's own shipped BigQuery skills follow this too, they sit inside the BigQuery tool's own package, next to the code that uses them, not in some project-wide skills directory.
-
-That leaves the actual placement decision to you, and two shapes make sense depending on scope. A skill specific to one agent belongs under that agent's own folder, alongside that agent's own code. A skill genuinely reused across multiple agents belongs somewhere shared, `agents/common/skills/`, alongside this project's other shared code like `model_config.py`. Neither is enforced, both are just what makes sense for how widely a given skill actually gets used, and Lesson 13a builds the first case.
 
 ## In this lesson
 
