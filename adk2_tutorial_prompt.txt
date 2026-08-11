@@ -192,7 +192,7 @@ Please go ahead and summarize the conversation now.
 --------------------
 Image prompts
 
-Create an image (PNG file) that will give a visual representation for the following lesson text. I want to show an agent getting text input and producing structured JSON output, which can be fed to downstream systems.
+Create an image (PNG file) that will give a visual representation for the following lesson text.  You need to create a visual representation of "What we are building in this lesson" section. I want to show an agent getting text input and producing the output, while interfacing with all the features (tools, session, memory etc. as highlighted in the lesson text).
 
 Use the Google color palette for the image and use pictures/images rather than simple shapes. Use legible fonts and space out the various components/parts/objects shown in the image. Don't crunch everything together. Don't create a box around the title text and center the title across width of image.
 

@@ -1,11 +1,13 @@
 # Lesson 4: Built-in Tools
 
-Lesson 3 gave an agent function tools you wrote yourself. This lesson introduces a different category: tools that ADK ships built in, where the model calls out to a capability Google runs on its own infrastructure rather than code sitting in your project. We'll build an agent with one directly - `google_search`, hit a real, current limitation along the way, and then build a genuine, working alternative for Claude, since Claude is our default for this series.
+Lesson 3 gave an agent function tools you wrote yourself. This lesson introduces a different category: **tools that ADK ships built in**, where the model calls out to a capability Google runs on its own infrastructure rather than code sitting in your project. We'll build an agent with one directly - `google_search`, hit a real, current limitation along the way, and then build a genuine, working alternative for Claude, which is our LLM of choice for this series.
 
 ## The problem we're solving
 
 A wealth management desk's investment research team gets asked two kinds of questions constantly: "What's Reliance Industries trading at right now?" and "Why did Tesla's stock move today?" The first is a data lookup, exactly the kind of thing Lesson 3's function tools handle well. The second request would need a slightly different approach - get the latest information from the web about Tesla to the LLM and let it figure out why Tesla's stock moved today, because it could very well be related to some _market event_. That's exactly what Google's search excels
 at, and what we are going to leverage for the 2nd kind of request.
+
+![Using Built-in Tools](images/Using%20Built-in%20Tools.png)
 
 We're going to build a market briefing agent that handles both: live prices via a function tool, and current news via web search. For live stock prices we'll use the `yfinance` library and we'll use an internal tool `google_search` for web searching.
 
@@ -133,7 +135,7 @@ AGENT_INSTRUCTION = (
 
 root_agent = Agent(
     name="market_briefing_agent",
-    model= "gemini-3.5-flash-lite",
+    model="gemini-3.5-flash-lite",
     instruction=AGENT_INSTRUCTION,
     description=(
         "Provides live stock prices and Google-Search-grounded news, "
@@ -153,11 +155,13 @@ Create `agents/lesson04_built_in_tools/__init__.py`:
 from . import agent
 ```
 
-One detail here needs a word of explanation before you run it, especially if you've seen older ADK examples that show search grounding as simply `tools=[google_search]`. That pattern isn't wrong, it's just dated: prior to ADK Python release 1.16 (October 2025), `google_search` genuinely could not be combined with any other tool in the same agent, only one built-in tool, by itself, per agent, so `tools=[google_search]` alone was the only supported shape. `google_search` itself is a ready-made, pre-built instance of the search tool that ADK exports directly, and it's still the simplest way to add search grounding when it's the *only* tool an agent needs. Here, though, we're also giving the agent our custom `get_stock_price` tool, and that's exactly the situation the plain `google_search` singleton doesn't handle. Drop it into this agent's tools list alongside `get_stock_price` and you'd hit an error, not a working two-tool agent!
+One detail here needs a word of explanation before you run it, especially if you've seen older ADK examples that show search grounding as simply `tools=[google_search]`. That pattern isn't wrong, it's just dated: prior to ADK Python release 1.16 (October 2025), `google_search` genuinely could not be combined with _any other tool_ in the same agent, only one built-in tool, by itself, per agent, so `tools=[google_search]` alone was the only supported shape 😮!
 
-That's what `GoogleSearchTool(bypass_multi_tools_limit=True)` is for. Instead of using the pre-built `google_search` instance, we construct the underlying `GoogleSearchTool` class ourselves and pass the flag that explicitly opts into combining it with other tools. This flag has been available since ADK 1.16 release, well before ADK 2.0, so this isn't a 2.x-only capability; if you've been working with a recent ADK 1.x codebase, you've had access to this fix the whole time, you just needed to know it existed 😮!
+`google_search` itself is a ready-made, pre-built instance of the search tool that ADK exports directly, and it's still the simplest way to add search grounding when it's the *only* tool an agent needs. Here, though, we're also giving the agent our custom `get_stock_price` tool, and that's exactly the situation the plain `google_search` singleton doesn't handle. Drop it into this agent's tools list alongside `get_stock_price` and you'd hit an error, not a working two-tool agent! `tools=[get_stock_price, google_search]` will simply not work 😟!
 
-Under the hood, setting the flag causes ADK to run the search as an isolated sub-agent call rather than a true inline model built-in: a separate, hidden model invocation handles the search and hands the result back to the main agent. That raises a fair question: _"if the fix is one keyword argument, why isn't it just the default behavior of `google_search` itself?"_ Because it isn't actually free. That hidden sub-agent call is a genuine extra model invocation, with its own latency and its own token cost, every single time search fires. If Google had made this the default, every existing single-tool search agent out there would have silently started making an extra hidden model call per search, with no code change and no warning, changing everyone's cost and latency profile overnight. You should, in fact, thank Google for this 😊.
+That's what the `GoogleSearchTool(bypass_multi_tools_limit=True)` is for. Instead of using the pre-built `google_search` instance, we construct the underlying `GoogleSearchTool` class ourselves and pass the flag that explicitly opts into combining it with other tools. This flag has been available since ADK 1.16 release, well before ADK 2.0, so this isn't a 2.x-only capability; if you've been working with a recent ADK 1.x codebase, you've had access to this fix the whole time, you just needed to know it existed 😎!
+
+That raises a fair question: _"if the fix is one keyword argument, why isn't it just the default behavior of `google_search` itself?"_ Because it isn't actually free. Under the hood, setting the flag causes ADK to run the search as an isolated sub-agent call rather than a true inline model built-in: a separate, hidden model invocation handles the search and hands the result back to the main agent. That hidden sub-agent call is a genuine extra model invocation, with its own latency and its own token cost, every single time search fires. If Google had made this the default, every existing single-tool search agent out there would have silently started making an extra hidden model call per search, with no code change and no warning, changing everyone's cost and latency profile overnight. You should, in fact, thank Google for this 😊.
 
 **The rule of thumb going forward:** reach for the plain `google_search` singleton when search grounding is the _only tool_ on an agent, and switch to `GoogleSearchTool(bypass_multi_tools_limit=True)` explicitly (knowing you'll incur more token costs!) the moment you need to combine it with anything else, exactly like we're doing here. 
 
