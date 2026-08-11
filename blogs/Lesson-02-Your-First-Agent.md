@@ -1,8 +1,10 @@
 # Lesson 2: Your First Agent
 
-In this lesson, you'll build and run your first working ADK agent: a simple assistant for a retail bank's customer support desk that explains everyday banking terms like APR, EMI, KYC, and overdraft in plain language. It won't touch real customer data or do anything BFSI-specific yet, that starts in Lesson 3, but it's enough to show you the three things every ADK agent needs, and the two ways you can run one on your machine.
+In this lesson, we'll build and run our first working ADK agent: a simple assistant for a retail bank's customer support desk that explains everyday banking terms like APR, EMI, KYC, and overdraft in plain English language. It won't touch real customer data or do anything BFSI-specific yet, that starts in Lesson 3, but it's enough to show you the three things every ADK agent needs, and the two ways you can run one on your machine.
 
-You'll also see the same agent answer using two different models, Claude Haiku and Gemini Flash, by changing a single line. That's worth seeing early, since it tells you something true about ADK: your agent code generally doesn't change when you swap the model underneath it.
+![Basic Agent](images/Basic%20Agent.png)
+
+We'll also see the same agent answer using two different models, Claude Haiku and Gemini Flash, by changing a single line of code! That's worth seeing early, since it tells you something true about ADK: your agent code generally doesn't change when you swap the model underneath it.
 
 ## Step 1: Create the agent folder
 

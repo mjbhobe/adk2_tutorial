@@ -8,13 +8,13 @@ without pulling in LiteLLM. By the end of this lesson, you'll have a working ADK
 
 Each lesson gets its own subfolder under `agents/`, but they all live inside one `uv`-managed project with one `.env` file.
 
-Two reasons:
+Two reasons for this:
 
-- `adk web` can browse a whole directory of agent subfolders at once, so you'll have a dropdown of every agent you've built so far, and can pick anyone and test it in the application, rather than having to run `adk web` separately for each project.
-- You only manage one virtual environment and one set of API keys, instead of copy-pasting `.env` files fourteen times.
+- `adk web` can browse a whole directory of agent subfolders at once, so you'll have a dropdown of every agent you've built so far, and can pick anyone and test it in the application, rather than having to run `adk web` separately for each project. `adk web` is a tool provided by the ADK test your agents - we'll see how to use it later.
+- You only manage one virtual environment and one set of API keys, instead of copy-pasting `.env` files fourteen times. This is very convenient when we are learning a new framework, such as the ADK.
 
 > 📌 **NOTE:** this is not the way you'd structure your projects in production. For production use, each project should
-> have it's own separate folder, with it's own `.env` file holding the API keys, it's own config files etc.
+have it's own separate folder, with it's own `.env` file holding the API keys, it's own config files etc.
 
 ## Step 1: Install uv
 
@@ -42,7 +42,9 @@ You want `0.5.0` or newer. `uv` handles both your Python version and your depend
 
 ## Step 2: Create the project
 
-We'll create all the code under a parent `adk2_tutorial` folder. We'll call this the **root folder of our project** - a phrase you'll encounter several times across the lessons. This folder can be created _anywhere_ on disk. We will build our projects under this folder.
+We'll create all the code under a parent `adk2_tutorial` folder. We'll call this the **root folder of our project** - a phrase you'll encounter several times across the lessons. This folder can be created _anywhere_ on disk. We'll build our projects under this folder.
+
+Start a new terminal and `cd` to the parent folder under which you'll be creating the `adk2_tutorial` folder.
 
 ```bash
 uv init adk2_tutorial --python 3.12
@@ -68,7 +70,7 @@ source .venv/bin/activate
 > `.venv\Script\activate.ps1` - on Windows Powershell <br/>
 > `source .venv/Script/activate` - on a git-bash shell <br/>
 >
-> In all the lessons, you'll see me use the Linux/Mac version of the command, because I'm using a Manjaro KDE Linux machine. Replace this with the appropriate command for your OS.
+> In all the lessons, you'll see me use the Linux/Mac version of the command, because I'm using a Manjaro KDE Linux machine as my primary development machine. Most the the commands will work as-is on a Mac. For Windows, use appropriate replacements.
 
 Confirm the interpreter version:
 
@@ -78,35 +80,34 @@ uv run python --version
 
 You should see `Python 3.12.x`. ADK 2.x requires Python 3.10 or newer.
 
-> 🎗️ **A matter of convenience**
+> 🎗️ **A matter of convenience for Windows developers**
 >
 > I often switch between my Linux box and a Windows 11 box during development. I don't own a Mac 🙁.
 >
-> To keep the Linux _feel_ going on Windows, I use a `git-bash` terminal. It gets installed when you install `git` for version control - I strongly recommend you use `git` too. Install it on Windows from [here](https://git-scm.com/install/). This is a much _lighter_ alternative to the Windows Shell for Linux (WSL), which I don't use.
+> To keep the Linux _feel_ going on Windows, I use a `git-bash` terminal. It gets installed automatically when you install `git` on Windows. I strongly recommend you use `git` for version control. You can install it on Windows from [here](https://git-scm.com/install/). Using `git-bash` is a much _lighter_ alternative to installing the complete Windows Shell for Linux (WSL), which I don't use.
 >
 > Along with `git` for Windows install, I get `git-bash` and most of my _most frequently_ used commands, like `touch`, `find`, `grep` etc. for _free_. Inside the `git-bash` shell I can continue to use `/` for directory separators, so `cd c:\code\adk2_tutorial` becomes `cd /c/code/adk2_tutorial` 😊. 
-> 
-> You'll notice throughout these lessons that we use the Unix/Linux convention for paths (the `/` forward slash separator). So if you'll be _copying and pasting_ the commands I show into your shell, and you are on Windows, it's best to use the `git-bash` shell to avoid _translating_ paths.
+
 
 ## Step 3: Add ADK and its dependencies
 
-Once your local environment is activated, run the following commands to add the required modules.
+**Once your local environment is activated** (this is important!!), run the following commands to add the required modules.
 
 ```bash
 uv add google-adk==2.5.0
 uv add anthropic python-dotenv pyyaml
 ```
 
-A few things worth explaining here, since each one caused real trouble the first time through:
+A few things worth explaining here:
 
-* **No `[litellm]` extra.** You might see this suggested elsewhere: `uv add "google-adk[litellm]"`. Don't use it! Current ADK releases don't expose a `litellm` extra (the real extras list is `a2a`, `agent-identity`, `all`, `benchmark`, `db`, `eval`, `extensions`, `gcp`, `mcp`, `toolbox`, `tools`, and a handful of others), so `uv` will just warn and silently skip it.
-* **We're skipping LiteLLM entirely, on purpose.** `LiteLLM` is the usual way people connect ADK to non-Gemini models, and you'll see it in most tutorials. Recent LiteLLM releases bundle a Rust-accelerated core built with `maturin`, and as of mid-2026, prebuilt Windows wheels for that Rust core aren't reliably published. That means `uv`/`pip` falls back to compiling it from source, which requires a full Rust toolchain and Microsoft's C++ Build Tools, neither of which you should need just to call an LLM API.
+* **No `[litellm]` extra.** You might see this suggested in other tutorials, e.g. `uv add "google-adk[litellm]"`. Don't use it, at lest not for this tutorial! 
+* **We're skipping LiteLLM entirely, on purpose.** `LiteLLM` is the usual way to connect ADK to non-Gemini models, and you'll see it in most other tutorials you may have come across. Recent LiteLLM releases bundle a Rust-accelerated core built with `maturin`, and as of mid-2026, prebuilt Windows wheels for that Rust core aren't reliably published. That means `uv`/`pip` will fall back to compiling it from source. And compilation requires that a full Rust toolchain and Microsoft's C++ Build Tools be pre-installed on Windows, which is a big overhead!
 * **We're pinning our ADK to version 2.5.0.** ADK is a fast-evolving framework. Google will no doubt keep adding capabilities and deprecating others as the framework matures. By pinning the version, we ensure the code listings in this series keep working exactly as written, so nothing breaks on your end simply because the ADK version has moved on.  It also lets us verify and confirm that every piece of code we write behaves as expected against this specific version.
-* Since we'll be using only Claude and Gemini models throughout this series (actually Claude only, Gemini in very few exceptionall cases), and Gemini is already native to ADK, LiteLLM's real value (bridging to 100+ providers) doesn't buy us anything. Instead, we use ADK's native Anthropic provider, `google.adk.models.anthropic_llm`, which is built directly on Anthropic's official `anthropic` Python package. That package is pure Python, so there's no compiler involved, on any platform. We'll use this provider starting in Lesson 2.
+* We'll be using Claude as our LLM of choice in all examples (actually in most examples - there will be a few exception where we are forced to use Gemini, which is native to the ADK). So, LiteLLM's real value (bridging to 100+ providers) doesn't buy us anything. Instead, we use ADK's native Anthropic provider, `google.adk.models.anthropic_llm`, which is built directly on Anthropic's official `anthropic` Python package. 
 
 ## Step 4: Get your API keys
 
-You need two, even though Claude will be our LLM of choice in almost all lessons. Gemini Flash is required later for one lesson (built-in Google Search grounding, which only works with Gemini models — the built-in Google Search and code execution tools are Gemini-native features, not something any provider bridge can route around).
+You need two - one for our default Claude LLM and the other for the Gemini LLM, which we'll be _forced_ to use in a few lessons where we use built-in Google Search grounding, which only works with Gemini models.
 
 **Anthropic (Claude):** console.anthropic.com → API Keys → Create Key.
 
@@ -116,7 +117,7 @@ You need two, even though Claude will be our LLM of choice in almost all lessons
 
 Nothing in this series gets hardcoded into Python files. Two config files carry everything.
 
-Create `.env` in the project root - this is for all your API keys.
+Create `.env` in the project root (i.e. in the `adk2_tutorial` folder) - this is for all your API keys.
 
 ```bash
 # .env
@@ -160,7 +161,11 @@ lesson_overrides: { }
 ```
 
 Keeping this in YAML rather than Python means you can change your entire series' model policy by editing one file, and
-it also gives your readers a single place to look if they want to substitute their own provider.
+it also gives you a single place to look if you want to change your provider.
+
+> 📌 **NOTE:** Our aim is to minimize the cost you incur when learning a new framework like the ADK. API access of leading model providers - OpenAI (GPT-models), Anthropic (Claude models) and Google (Gemini models) - is not free. 
+>
+> We default to using the "cheapest" model in all our examples, unless the use-case specifically calls for using a more costly model.
 
 ## Step 6: VS Code setup
 
@@ -328,7 +333,7 @@ If the ADK CLI check fails, re-run `uv add google-adk==2.5.0` and make sure you'
     └── settings.json
 ```
 
-Your `pyproject.toml` dependencies section should show:
+Your `pyproject.toml` dependencies section should look something like this:
 
 ```toml
 dependencies = [
