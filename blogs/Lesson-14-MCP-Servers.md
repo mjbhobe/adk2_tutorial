@@ -11,6 +11,8 @@ It defines a _client-server_ relationship:
 * An **MCP server** exposes capabilities over the protocol.
 * An MCP **client** connects to it and can discover and call those capabilities the same way it would call a local tool. 
 
+![MCP Servers with ADK](images/MCP%20Servers%20with%20ADK.png)
+
 ADK's client `McpToolset`, is one implementation of the client side. The server it connects to doesn't have to be written in Python, nor use ADK, or even exist yet when you write your agent's code! As long as it speaks MCP, it can be plugged in.
 
 
@@ -124,4 +126,4 @@ You learned what MCP actually is, a client-server protocol for reaching tools an
 
 ## In the upcoming lessons
 
-In the next lesson, `14a`, we'll code an agent that uses an MCP server, connecting to Alpha Vantage's real, official server over `StreamableHTTPConnectionParams` to pull live stock data and financial statements through a genuinely external service for the first time in this series, then extend it to show a skill gating one of Alpha Vantage's tools on demand, the pairing just covered above, working alongside the plain, always-available version. Thereafter, in `14b`, we'll develop an MCP server of our own, a mutual fund NAV lookup built with the standalone `mcp` SDK, offered over both `StdioConnectionParams` and `StreamableHTTPConnectionParams`, then consumed back through `McpToolset` to prove the round trip actually works.
+In this lesson `14a`, we will put the Model Context Protocol into practice by connecting two ADK agents to Stripe's official MCP server (Stripe is a payments platform). We will explore both plain MCP consumption using `McpToolset` and context-disciplined tool gating by embedding the server inside a `SkillToolset`. Since the Stripe MCP server is a remote server, this example will use the `StreamableHTTPConnectionParams` transport to access the server.
