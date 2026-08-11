@@ -2,7 +2,7 @@
 
 Before you write a single agent, you need a workspace that won't fight you later. We're going to set up one shared
 project for this entire series, using `uv` for environment management, Python 3.12, and a direct connection to Claude,
-without pulling in LiteLLM. By the end of this lesson, you'll have a working ADK install and a verified connection to Claude Haiku, without having built an agent yet.
+without pulling in LiteLLM. By the end of this lesson, you'll have a working ADK install and a verified connection to Claude Haiku, without having built an agent yet. 
 
 ## Why one shared project instead of separate ones for each example?
 
