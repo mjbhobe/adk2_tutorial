@@ -1,10 +1,10 @@
 # Lesson 2: Your First Agent
 
-In this lesson, we'll build and run our first working ADK agent: a simple assistant for a retail bank's customer support desk that explains everyday banking terms like APR, EMI, KYC, and overdraft in plain English language. It won't touch real customer data or do anything BFSI-specific yet, that starts in Lesson 3, but it's enough to show you the three things every ADK agent needs, and the two ways you can run one on your machine.
-
-![Basic Agent](images/Basic%20Agent.png)
+In this lesson, we'll build and run our first working ADK agent: a simple assistant for a retail bank's customer support desk that explains everyday banking terms like APR, EMI, KYC, and overdraft in plain English language. It won't touch real customer data nor do anything BFSI-specific yet, that starts in Lesson 3, but it's enough to show you the three things every ADK agent needs, and the two ways you can run one on your machine.
 
 We'll also see the same agent answer using two different models, Claude Haiku and Gemini Flash, by changing a single line of code! That's worth seeing early, since it tells you something true about ADK: your agent code generally doesn't change when you swap the model underneath it.
+
+![Basic Agent](images/Basic%20Agent.png)
 
 ## Step 1: Create the agent folder
 
@@ -13,7 +13,10 @@ Every ADK agent lives in its own folder with a specific, small structure: an `ag
 Open the project root folder (`adk2_tutorial`) in a terminal and run the following command:
 
 ```bash
+# On Linux/Mac
 mkdir -p agents/lesson02_first_agent
+# On Windows 10/11
+mkdir agents\lesson02_first_agent
 ```
 
 You don't need a separate `.env` file inside this folder. ADK automatically looks upward from an agent's folder for a `.env` file, so the one you created at `adk2_tutorial/.env` back in Lesson 1 already covers every agent folder we'll create in this series.
@@ -29,7 +32,7 @@ A minimal agent that answers general banking terminology questions for
 a retail bank's customer support desk.
 
 Everything here is hardcoded on purpose. Starting in Lesson 3, model
-choice and instructions move into config/models.yaml and per-agent
+choice move into config/models.yaml and per-agent
 config, so agents stop needing code changes to swap models.
 """
 
@@ -71,13 +74,13 @@ Create `agents/lesson02_first_agent/__init__.py`:
 from . import agent
 ```
 
-That's the whole agent. Three real pieces: a `model`, an `instruction`, and a `name`. Everything else, the conversation loop, calling the LLM API, managing the exchange, is ADK's job, not yours.
+That's it! That's your whole agent 😮. Three required attributes: a `model`, an `instruction`, and a `name`. Everything else, including `description`, is optional.
 
 ## What each parameter in `Agent(...)` actually does
 
-Before we move on, it's worth knowing what each of these four arguments controls, since you'll use all of them in every agent you build for the rest of this series.
+Before we move on, it's worth knowing what each of the parameters we have used in the `Agent`'s constructor above actually does, since we'll use all of them in every agent we'll build for the rest of this series.
 
-- **`name`** (mandatory) — a unique identifier for this agent. ADK enforces two rules on it: it must be a valid Python identifier (letters, digits, underscores, no spaces or hyphens, can't start with a digit), and it **can't be the literal string `"user"`**, since ADK reserves that for the end user's own input. Once you start building multi-agent systems, this name is also how one agent refers to another, so it's worth naming agents descriptively from the start, the way we did with `bfsi_support_desk_agent`.
+- **`name`** (mandatory) — a unique identifier for this agent. ADK enforces two rules on it: **it must be a valid Python identifier** (same rules as naming a Python variable - letters, digits, underscores, no spaces or hyphens, can't start with a digit), and **it can't be the literal string `"user"`** (ADK reserves `user` for the end user's own input). Once you start building multi-agent systems, this name is also how one agent refers to another, so it's worth naming agents descriptively from the start, the way we did with `bfsi_support_desk_agent`.
 
 - **`model`** (mandatory) — which LLM answers on this agent's behalf, either a plain string (for models ADK resolves natively, like Gemini) or a model object you construct yourself (as we just did for Claude, with `AnthropicLlm(...)`). This is the one parameter you'll see change the most across the series as we swap between Haiku, Sonnet, and Gemini Flash depending on the lesson.
 
@@ -91,15 +94,41 @@ Notice that Gemini gets passed in as a plain string (`"gemini-3.5-flash-lite"`),
 
 When you give ADK a plain model name string, it looks the name up against a set of built-in patterns to decide which provider to use. Gemini names resolve straight to ADK's native Gemini support, no extra step needed. Claude names, if left as a plain string, resolve to a version of Claude meant to run through Google Cloud's Vertex AI, which expects a GCP project to be configured. Since we're using a direct Anthropic API key instead, a bare Claude string would fail with a configuration error. Wrapping it in `AnthropicLlm(...)` sidesteps that entirely and talks to Anthropic directly, using the `ANTHROPIC_API_KEY` you already set in `.env`. You'll use this same pattern every time you reach for Claude in this series.
 
+> 💡 **What about `LiteLLM`?**
+> 
+> If you have read other ADK tutorials, you must have seen the following Agent coding pattern:
+>
+> ```python
+> from google.adk.models.lite_llm import LiteLlm
+>
+> AGENT_INSTRUCTION = (
+>   "You are a friendly, knowledgeable assistant ...
+> )
+>
+> root_agent = Agent(
+>    name="bfsi_support_desk_agent",
+>    model=LiteLlm(model="anthropic/claude-3-5-haiku-20241022"),
+>    instruction=AGENT_INSTRUCTION,
+>    description="Answers general retail banking terminology questions.",
+>)
+> ```
+>
+> `LiteLlm` is a great option when you want to interface your ADK agents with a variety of LLM providers, such as OpenAI, Anthropic, Google, Llama etc. We have chosen Claude as our model of choice in this lesson series, and we fall back to Gemini only where ADK mandates using Gemini, so there is no advantage of using `LiteLlm` in this series. 
+
+
 ## Step 3: Run it with `adk run`
 
-`adk run` gives you a command-line chat loop, the fastest way to test an agent without opening a browser. From the project root (i.e. from `adk2_tutorial` folder) run the following command:
+`adk run` gives you a command-line chat loop, the fastest way to test an agent. From the project root (i.e. from `adk2_tutorial` folder) run the following command:
 
 ```bash
+# first activate your local environment
+source .venv/bin/activate # (or .venv\Scripts\activate.bat on Windows)
 uv run adk run agents/lesson02_first_agent
 ```
 
-> 📌 **NOTE** We pass a folder name (specifically the name of the folder containing our `agent.py` file) to the `adk run` command - not a Python module name!
+> 📌 **NOTE** We pass a _folder name_ (specifically the name of the folder containing our `agent.py` file) to the `adk run` command - not a Python module name!
+>
+> And _yes_, the `uv run adk run ...` command is correct! It's using `uv` to run the `adk run` command 😊.
 
 If all runs correctly, you'll see a bunch of logging information printed on your console, which you can safely ignore, followed by this: 
 
@@ -108,13 +137,13 @@ Running agent bfsi_support_desk_agent, type exit to exit.
 [user]: 
 ```
 
-The `bsfi_support_desk_agent` comes from the value of the `name` parameter we gave our Agent. Type a question like:
+The `bsfi_support_desk_agent` comes from the value of the `name` parameter we gave our Agent. Type a question like the following after the `[user]` prompt and press Enter:
 
 ```
 What does APR mean?
 ```
 
-and press Enter. Within a few seconds you should see a short, plain-language explanation come back, written the way you'd expect a bank's support desk to explain it to a new customer. For example you may see something like this (your text may vary because LLM output is not deterministic!):
+Within a few seconds you should see a short, plain-language explanation come back, written the way you'd expect a bank's support desk to explain it to a new customer. For example you may see something like this (your text may vary because LLM output is not deterministic!):
 
 ```bash
 [user]: What does APR mean?
@@ -128,9 +157,24 @@ APR helps you compare loans fairly because it includes the interest rate plus an
 
 Try a couple more terms if you like: EMI, KYC, overdraft. Type `exit` or press `Ctrl+C` when you're done.
 
+> 🎗️ **NOTE: How to supress excessive logging messages when using `adk run`**
+>
+> You may have noticed a lot of log messages "dumped" on your terminal before you see the `Running agent bfsi_support_desk_agent, type exit to exit.` message. This can be quite distracting & frankly annoying at times 🤬.
+> 
+> Here's a quick & easy way of supressing all those messages - run the applicable option below depending on which "shell" (terminal) you are using:
+>
+> **Bash/Zsh/Git-bash**: `PYTHONWARNINGS=ignore uv run adk run agents/lesson02_first_agent`
+>
+> **Windows CMD**: `set PYTHONWARNINGS=ignore && uv run adk run agents/lesson02_first_agent`
+>
+> **Windows PowerShell**: `$env:PYTHONWARNINGS="ignore"; uv run adk run agents/lesson02_first_agent`
+>
+> This will suppress MOST of the messages, making for a much cleaner screen 😊.
+
+
 ## Step 4: Run it with `adk web`
 
-`adk web` starts a local browser-based chat UI, and it becomes genuinely useful once you have more than one agent in your project, since it lists every agent it finds in a dropdown. Run it from your project root, pointing at the whole `agents/` folder rather than this one lesson's subfolder:
+`adk web` starts a local browser-based chat UI, and it becomes genuinely useful once you have more than one agent in your project, since it lists every agent it finds in a dropdown. Run it from your project root, pointing at the `agents/` folder rather than this one lesson's subfolder:
 
 ```bash
 uv run adk web agents
@@ -138,19 +182,15 @@ uv run adk web agents
 
 ADK will print a local URL, typically `http://127.0.0.1:8000`. Open it in your browser and you'll see something like this:
 
-<div align="center">
-    <image src="images/adk_web_ui.png" alt="adk web UI"/>
-</div>
+![ADK Web UI](images/adk_web_ui.png)
 
 You'll see a dropdown with one entry, `lesson02_first_agent`, select it, and you'll get a chat window that behaves the same way as `adk run`, just with a proper UI: message history, a text box, and a cleaner read on the agent's responses. Ask it the same banking-terms questions - for example asking `What is APR` may give a response like this:
 
-<div align="center">
-    <image src="images/adk_web_ui2.png" alt="adk web UI Response"/>
-</div>
+![ADK Web Query](images/adk_web_ui2.png)
 
 Right now there's only one agent to pick from, but by the time we're a few lessons in, this dropdown will hold several, which is exactly why the project is structured this way.
 
-## Step 5: Switch it to Gemini Flash
+## Step 5: Switch to Gemini Flash model 
 
 Open `agent.py` and change one line:
 
@@ -167,14 +207,6 @@ uv run adk run agents/lesson02_first_agent
 Ask the same question you asked before. You'll get an answer from a different model, likely worded a bit differently, but coming from the exact same agent definition, same instruction, same code around it. That's the point of this step: switching providers here took one line, not a rewrite.
 
 Set `USE_GEMINI_FLASH` back to `False` before moving on, since Claude Haiku is our default for the rest of the series.
-
-## If you're coming from LangChain or LangGraph
-
-What you just built maps closely to the simplest possible LangGraph app: a single node with a system prompt and no graph or edges around it yet. ADK's `Agent` and a single-node LangGraph app are solving the same narrow problem here. The real differences between the two frameworks show up once you start composing multiple agents together and need to decide how control passes between them, which is where Lesson 8 picks up.
-
-## A word on cost
-
-This lesson used a handful of short exchanges on Claude Haiku, and the same again if you tried the Gemini Flash swap. Both are inexpensive per token for messages this short, and Gemini Flash specifically has a free tier that easily covers this kind of testing. You shouldn't see any meaningful cost from this lesson.
 
 ## Conclusion
 
