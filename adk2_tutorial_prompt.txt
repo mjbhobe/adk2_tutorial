@@ -1,4 +1,6 @@
-﻿I am developing a blog series to help developers create Agents with the Google Agent Development Ki (ADK). We have developed lessons that cover all the features of an ADK agent such as Agent definitions, tools, sessions & state, long term memory, serving layer etc.
+﻿Kośadhārā
+
+I am developing a blog series to help developers create Agents with the Google Agent Development Ki (ADK). We have developed lessons that cover all the features of an ADK agent such as Agent definitions, tools, sessions & state, long term memory, serving layer etc.
 
 Now I want to create an image that correctly & visually represents the anatomy of an ADK agent with all above features. Can you generate one from the summary below? Use the same color palette, font sizes & icons you have used so far, but give me an image that connects all the features correctly. Don't just go by my previous instructions - challenge me by refering to latest ADK 2.x documentation and making all corrections so that the resulting image is the correct representation.
 
