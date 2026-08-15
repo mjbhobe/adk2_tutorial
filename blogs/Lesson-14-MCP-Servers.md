@@ -4,7 +4,7 @@ Skills package knowledge, `AgentTool` wraps another agent, both stay inside your
 
 ## What MCP actually is
 
-MCP is an open protocol for connecting an LLM application to external tools and data. Though invented by Anthropic, it's not specific to Anthropic or Google or OpenAI. 
+**MCP is an open protocol for connecting an LLM application to external _tools and data_**. Though invented by Anthropic, it's not specific to Anthropic or Google or OpenAI. 
 
 It defines a _client-server_ relationship: 
 
@@ -14,7 +14,6 @@ It defines a _client-server_ relationship:
 ![MCP Servers with ADK](images/MCP%20Servers%20with%20ADK.png)
 
 ADK's client `McpToolset`, is one implementation of the client side. The server it connects to doesn't have to be written in Python, nor use ADK, or even exist yet when you write your agent's code! As long as it speaks MCP, it can be plugged in.
-
 
 A server exposes two different kinds of _things_ worth telling apart:
 
@@ -56,7 +55,9 @@ One tool handles every resource the server has; the server's own tools are still
 
 **Building** an MCP server (server side) has nothing to do with `google-adk`! It's the standalone `mcp` SDK's own server-building tools, a completely separate concern from anything ADK provides.
 
-> 📌 **NOTE:** To build MCP clients with the ADK, install `google-adk[mcp]`. You don't need `mcp` (i.e. `uv add mcp` IS NOT REQUIRED!). The `mcp` package is required when you want to write an MCP server - nothing to do with the ADK.
+> 📌 **NOTE:** To build MCP clients with the ADK, install `google-adk[mcp]`. You don't need to install `mcp` separately (i.e. `uv add mcp` IS NOT REQUIRED!). The `mcp` package is required when you want to write an MCP server - nothing to do with the ADK.
+>
+> Incidentally `google-adk[mcp]` auto installs `mcp` package.
 
 ```bash
 uv add "google-adk[mcp]"
@@ -67,10 +68,10 @@ uv add "google-adk[mcp]"
 `McpToolset` accepts a `connection_params` argument, and it can take 3 values:
 
 - **`StdioConnectionParams`**: the client launches the server as a local subprocess and talks to it over standard input and output. No network involved at all. This is the value you'd use if your MCP server runs on the same machine as the one client using it. It is the simplest of the 3 options & a good way to _test_ your MCP server with an ADK client.
-- **`StreamableHTTPConnectionParams`**: the current standard for anything remote or reachable by more than one client, a single HTTP endpoint handling both directions. This is what the official MCP specification recommends for remote connections, and this is what you'll use in most cases when you access remote MCP servers.
-- **`SseConnectionParams`**: an older remote transport, two separate endpoints instead of one, _officially deprecated_. It still exists, ADK still supports it, and plenty of servers built before the spec changed still only offer it, but it's not what you'd choose for anything new.
+- **`StreamableHTTPConnectionParams`**: the current standard for anything remote or reachable by more than one client, a single HTTP endpoint handling both directions. This is what the official MCP specification recommends for remote connections, and this is what we'll use in most cases when we access remote MCP servers.
+- **`SseConnectionParams`**: an older remote transport, two separate endpoints instead of one. It is _officially deprecated_. It still exists, ADK still supports it, and plenty of servers built before the spec changed still only offer it, but it's not what you'd choose for anything new.
 
-> 📌 **NOTE:** If you see "SSE" mentioned in an MCP server's documentation, that's a signal about its age, not a style choice. For newer MCPs use `StdioConnectionParams` for local servers, `StreamableHTTPConnectionParams` for remote (which is the default you'll use in most cases).
+> 📌 **NOTE:** If you see "SSE" mentioned in an MCP server's documentation, that's a signal about its age, not a style choice. For newer MCPs use `StdioConnectionParams` for local servers, or `StreamableHTTPConnectionParams` for remote servers.
 
 ## Why the transport choice actually matters for where your agent runs
 
@@ -78,9 +79,25 @@ This isn't just a spec detail, it maps directly onto where your agent and its MC
 
 `StreamableHTTPConnectionParams` is what a scalable, possibly multi-instance agent deployment actually needs, and `McpToolset` is built with that in mind: its session manager pools sessions by authentication context, so repeated calls under the same auth headers reuse an already-established MCP session rather than reconnecting every time. That's the shape you want when your agent is running as a real service talking to a remote server, not a one-off script.
 
-## What else `McpToolset` actually supports
+## What else does `McpToolset` actually support
 
 Beyond the transport, its constructor takes `auth_scheme` and `auth_credential` for servers that require authentication, `tool_filter` to expose only some of a server's tools, and `header_provider` for anything else a request needs to carry.
+
+Here is an example of how that call could look like:
+
+```python
+def stripe_auth_headers(readonly_context) -> dict[str, str]:
+    """Computed fresh on every call, not fixed once at construction time."""
+    return {"Authorization": f"Bearer {get_current_stripe_key()}"}
+
+mcp_toolset = McpToolset(
+    connection_params=StreamableHTTPConnectionParams(url="https://mcp.stripe.com"),
+    header_provider=stripe_auth_headers,
+    tool_filter=["get_stripe_account_info", "create_refund"],
+)
+```
+
+`header_provider` is worth reaching for over a static header whenever a credential might rotate, a token that expires and gets refreshed, for instance, since it's called fresh each time rather than baked in once. `tool_filter` does at the `McpToolset` level what a Skill does more selectively in the pairing above, cuts a server's exposed surface down to only the tools actually needed, just without the load-on-demand behavior a skill adds on top.
 
 ## MCP, `AgentTool`, and Skills, one more comparison
 
@@ -118,12 +135,12 @@ Thousands of these already exist, most maintained independently by whoever built
 - **[`github.com/modelcontextprotocol/servers`](github.com/modelcontextprotocol/servers)**, the official reference server repository, maintained under the same GitHub organization as the protocol itself.
 - **`pulsemcp.com`** and **`mcpservers.org`**, community directories that index and let you search across servers by category.
 
-In the next lesson, we connect to one specific, officially maintained server: **Alpha Vantage's** server, at `https://mcp.alphavantage.co/mcp?apikey=YOUR_API_KEY` (`github.com/alphavantage/alpha_vantage_mcp`), maintained by Alpha Vantage themselves, not a community reimplementation, giving you real stock quotes and financial statements through a genuinely external service.
+In the next lesson we'll connect to one specific, officially maintained server: Stripe's, at [https://mcp.stripe.com](https://mcp.stripe.com), authenticated with a bearer token rather than an interactive login, giving you real account data, and the ability to issue a real refund, through a genuinely external service.
 
 ## In this lesson
 
 You learned what MCP actually is, a client-server protocol for reaching tools and resources outside your own process, and the real difference between consuming a server (`McpToolset`, part of core ADK) and building one (the standalone `mcp` SDK, unrelated to ADK). You saw the actual install trap that catches this, `pip install mcp` alone can pull the wrong package, and the correct fix, `google-adk[mcp]`. You also got the current, accurate picture of MCP's transports, `stdio` for local, `Streamable HTTP` for remote, and `SSE` as the deprecated transport still around for backward compatibility, not something to build new work on.
 
-## In the upcoming lessons
+## In the upcoming lesson
 
-In this lesson `14a`, we will put the Model Context Protocol into practice by connecting two ADK agents to Stripe's official MCP server (Stripe is a payments platform). We will explore both plain MCP consumption using `McpToolset` and context-disciplined tool gating by embedding the server inside a `SkillToolset`. Since the Stripe MCP server is a remote server, this example will use the `StreamableHTTPConnectionParams` transport to access the server.
+In the next lesson, `14a`, we'll code an agent that uses an MCP server, connecting to Stripe's real, official server over `StreamableHTTPConnectionParams` to pull real account data and issue a real refund through a genuinely external service for the first time in this series. Then we'll extend it to show a skill gating the refund tool on demand, the pairing just covered above, working alongside the plain, always-available version.
