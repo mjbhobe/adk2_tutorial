@@ -32,7 +32,7 @@ async def main() -> None:
     session_id = str(uuid.uuid4())
 
     print("Loan support assistant (Skills, a plain tool, and an AgentTool).")
-    print("Try a PAN question, an EMI question, or a full risk assessment. Type 'quit' to exit.\n")
+    print("Try asking what a loan term means, a PAN question, an EMI question, or a full risk assessment. Type 'quit' to exit.\n")
 
     loop = asyncio.get_event_loop()
     while True:
