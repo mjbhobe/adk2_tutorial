@@ -1,10 +1,10 @@
 # Lesson 14b: Building Your Own MCP Server
 
-`14a` connected to a server someone else built and maintains, Stripe's. This lesson builds one of your own, a mutual fund data server, using the standalone `mcp` SDK, not `google-adk`, that's a completely separate concern from consuming a server. Then it gets consumed back, over both transports, `stdio` and streamable HTTP, to prove the round trip actually works, not just that the server starts.
+In the previous lesson `14a` we connected to a server someone else built and maintains, Stripe's. In this lesson we build one of our own, a mutual fund data server using the standalone `mcp` SDK. Then it gets consumed back, over both transports, `stdio` and streamable HTTP.
 
 ## What we're building
 
-This lesson builds a server that answers one simple question about any mutual fund, no matter where it's from: _what's it worth right now_, and _how has it moved recently_? An agent can ask about _any_ fund, be it from India or from anywhere else, without needing to know anything about where the underlying data actually comes from. That's the server's job to figure out, not the agent's.
+This lesson builds a server that answers one simple question about any mutual fund, no matter where it's from: _what's it worth right now_, and _how has it moved recently_? An agent can ask about _any_ mutual fund, be it from India or from anywhere else, without needing to know anything about where the underlying data actually comes from. That's the server's job to figure out, not the agent's.
 
 The real challenge for this specific implementation is that mutual funds split into two genuinely different worlds:
 

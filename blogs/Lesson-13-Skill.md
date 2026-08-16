@@ -1,23 +1,25 @@
 # Lesson 13: Skills — Packaging and Reusing Agent Capabilities
 
-The ADK provided 2 ways to reuse agent behavior:
+The ADK provides several ways to reuse agent behavior:
 
 1. `SequentialAgent`, `ParallelAgent`, and `LoopAgent` reuse a fixed shape of orchestration. 
 2. An `AgentTool` reuses a whole agent, its own model, its own instruction, its own tools, as one callable unit.
-3. And this lesson covers `Skills`, the 3rd kind of reuse: skills  package knowledge and procedure, not agents, so any agent can pick it up on demand, without that knowledge being hardcoded into its instruction ahead of time.
+3. And this lesson covers `Skills`, the 3rd kind of reuse: skills  package knowledge and procedure, not agents, so any agent can pick it up on demand, _without that knowledge being hardcoded into its instruction ahead of time_.
 
 ## Why Skills exist: the gap a shared tools.py doesn't close
 
 Across lessons `11a`, `11b`, and `12`, PAN validation, the credit bureau mock, and the EMI formula got written fresh into each lesson's own `tools.py`. The obvious fix is a shared module, one `validate_pan_format` function, imported into every agent that needs it. That solves code duplication, but it doesn't solve two other things:
 
 1. **Every agent still needs its own instruction text** explaining when and how to use that tool. The function is shared but the guidance around it isn't.
-2. **A plain function tool has no "only when relevant" mode.** Once `validate_pan_format` is in an agent's `tools=[]` list, it's sent to the model as one of its available functions on *every single turn*, whether that conversation ever mentions a PAN or not. There's no way to say "this agent knows PAN validation exists, but only pulls in the real detail once a PAN actually shows up", a plain function tool is either in the list or it isn't.
+2. **A plain function tool has no "only when relevant" mode.** Once `validate_pan_format` is in an agent's `tools=[]` list, it's sent to the model as one of its available functions on *every single turn*, whether that conversation ever mentions a PAN or not. 
 
-A Skill closes both gaps. The instructions live in one place, `SKILL.md`, not copied into every agent's own instruction. And they're discovered and loaded on demand, an agent with several skills available doesn't carry the full weight of all of them on every turn, only the ones it actually decides to use.
+    There's no way to say "this agent knows PAN validation exists, but only pull in the real detail once a PAN actually shows up"! A plain function tool is either in the list or it isn't.
+
+A Skill closes both gaps. The instructions live in one place, a `SKILL.md` (markdown format) file, not copied into every agent's own instruction. And they're discovered and loaded on demand, an agent with several skills available doesn't carry the full weight of all of them on every turn, only the ones it actually decides to use.
 
 ## What a Skill actually is
 
-A Skill is a folder with a specific shape:
+A Skill is a folder with a specific layout:
 
 ```
 pan-validation/
@@ -27,15 +29,16 @@ pan-validation/
 └── scripts/      (optional)
 ```
 
-`SKILL.md` has two parts: YAML frontmatter, then a markdown body. The frontmatter needs exactly two required fields, `name` and `description`; everything else, `license`, `compatibility`, `allowed-tools`, `metadata`, is optional. Here's the example with every field included:
+`SKILL.md` has two parts: YAML front-matter, then a markdown body. The front-matter needs exactly two required fields, `name` and `description`. Everything else, such as `license`, `compatibility`, `allowed-tools`, `metadata`, is optional. 
+
+Here's the example with every field included:
 
 ```markdown
 ---
 name: pan-validation
 description: |
-  Validates Indian PAN (Permanent Account Number) format and explains
-  what each part of a PAN means. Use this whenever an agent needs to
-  check or explain a PAN.
+  Validates Indian PAN (Permanent Account Number) format. Use this
+  whenever an agent needs to check whether a PAN is well-formed.
 license: Apache-2.0
 compatibility: Requires no external services; pure Python validation.
 allowed-tools: validate_pan_format
