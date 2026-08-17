@@ -18,7 +18,7 @@ We'll be implementing 5 tools to make this happen:
 
 All 5 tools sit on the same MCP server. The calling agent's model decides which one applies, based on whether it's looking at a numeric scheme code or a ticker symbol, exactly the same kind of judgment call Lesson `11d`'s routing example made between two specialist agents.
 
-> **NOTE:** Both `api.mfapi.in` and `yfinance` are real, live, external services. The data this server returns depends on your own environment having ordinary internet access, and on both services being reachable at the time you run it.
+> 📌 **NOTE:** Both `api.mfapi.in` and `yfinance` are real, live, external services. The data this server returns depends on your own environment having ordinary internet access, and on both services being reachable at the time you run it.
 
 ## Step 1: Install what this lesson needs
 
@@ -28,11 +28,11 @@ Three new packages, all before writing a line of code, so nothing in the steps b
 uv add "google-adk[mcp]==2.5.0" httpx yfinance
 ```
 
-`google-adk[mcp]` pulls in the full `mcp` SDK AND `mcp.server.fastmcp.FastMCP`, which is the class this lesson's server is built on. You don't need a separate install of the `mcp` package. 
+`google-adk[mcp]` pulls in the full `mcp` SDK AND `mcp.server.fastmcp.FastMCP`, which is the class this lesson's server is built on. You don't need a separate install of the `mcp` package.
 
-`httpx` is an HTTP client required for Indian mutual fund data. 
+`httpx` is an HTTP client required for Indian mutual fund data access.
 
-`yfinance` was already installed in previous lessons. It's _strictly_ not a new package to install. We added this to the installs list in case you jumped straight to this lesson. Even if you did install it previously, adding it again won't do much much harm. `uv` will just confirm that it's alredy there!
+`yfinance` is used for accessing non-Indian MF info. It was already installed in previous lessons. so it's _strictly_ not a new package. We added this to the installs list in case you jumped straight to this lesson instead of following our sequence 😊. Even if you did install it previously, adding it again won't do much much harm. `uv` will just confirm that it's alredy there!
 
 ## Step 2: Set up the folder structure
 
@@ -168,8 +168,9 @@ async def get_indian_mf_nav_history(scheme_code: str, days: int) -> dict:
 
 ## Step 4: Build the global mutual fund data module
 
+Create `agents/lesson14b_mcp_server/nav_server/global_mf.py`
+
 ```python
-# agents/lesson14b_mcp_server/nav_server/global_mf.py
 """Lesson 14b: Real global mutual fund data via yfinance.
 
 Covers non-Indian funds, identified by ticker rather than an AMFI
@@ -177,11 +178,6 @@ scheme code, e.g. VFIAX for Vanguard 500 Index Fund Admiral Shares.
 yfinance itself is synchronous, so calls run in a thread via
 asyncio.to_thread, keeping this an async tool without blocking the
 server's event loop.
-
-@author: Manish Bhobé
-My experiments with Python, Agentic AI and ADK.
-Code shared for learning purposes only! Use at your own risk.
-No warranties or guarantees of any kind.
 """
 
 import asyncio
@@ -253,17 +249,13 @@ Notice both `get_indian_mf_nav` and `get_global_mf_price` return the same shape 
 
 ## Step 5: Build the server
 
+Create `agents/lesson14b_mcp_server/nav_server/server.py`
+
 ```python
-# agents/lesson14b_mcp_server/nav_server/server.py
 """Lesson 14b: Mutual fund data MCP server, runnable over stdio or streamable HTTP.
 
 Two families of tools, Indian mutual funds (via api.mfapi.in) and
 global mutual funds (via yfinance), both real data, no mocks.
-
-@author: Manish Bhobé
-My experiments with Python, Agentic AI and ADK.
-Code shared for learning purposes only! Use at your own risk.
-No warranties or guarantees of any kind.
 """
 
 import argparse
@@ -312,14 +304,10 @@ if __name__ == "__main__":
 
 ## Step 6: Build the consuming agents
 
-```python
-# agents/lesson14b_mcp_server/nav_consumer/agent.py
-"""Lesson 14b: Agent factory functions, one per transport, same MCP server.
+Create `agents/lesson14b_mcp_server/nav_consumer/agent.py`
 
-@author: Manish Bhobé
-My experiments with Python, Agentic AI and ADK.
-Code shared for learning purposes only! Use at your own risk.
-No warranties or guarantees of any kind.
+```python
+"""Lesson 14b: Agent factory functions, one per transport, same MCP server.
 """
 
 import sys
@@ -423,14 +411,10 @@ The instruction is the only thing actually teaching the model to route correctly
 
 ## Step 7: Wire up main.py
 
-```python
-# agents/lesson14b_mcp_server/main.py
-"""Lesson 14b: Run the mutual fund consumer agent against the server we built.
+Create `agents/lesson14b_mcp_server/main.py`
 
-@author: Manish Bhobé
-My experiments with Python, Agentic AI and ADK.
-Code shared for learning purposes only! Use at your own risk.
-No warranties or guarantees of any kind.
+```python
+"""Lesson 14b: Run the mutual fund consumer agent against the server we built.
 """
 
 import argparse
