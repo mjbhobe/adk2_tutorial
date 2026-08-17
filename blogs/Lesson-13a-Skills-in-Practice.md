@@ -2,7 +2,7 @@
 
 A `Skill` packages knowledge or procedure, not code an agent always carries, so it can be discovered and pulled in only when actually relevant, rather than bloating every agent's instruction with guidance most conversations never touch. You reach for one when a capability is genuinely optional per conversation, checking a PAN, calculating an EMI, something an agent shouldn't need to know about by default but should be able to find and use the moment it's needed.
 
-Quick recap: a Skill is a `SKILL.md` file, required `name` and `description`, an optional instructions body, and optional `references/`, `assets/`, and `scripts/` folders, loaded in layers so an agent only pays for what it actually decides to use. `SkillToolset` gives an agent four tools of its own, list, load, load a resource, run a script, and the model decides when to reach for each. The theory lesson also confirmed something worth actually seeing work, not just reading about: a Skill, a plain function tool, and an `AgentTool` can all sit on the same agent at once, resolved together with no special handling. This lesson builds three skills, from the simplest possible shape up to a scripted one, plus that full combination, for real.
+Quick recap: a Skill is a `SKILL.md` file, required `name` and `description`, an optional instructions body, and optional `references/`, `assets/`, and `scripts/` folders, loaded in layers so an agent only pays for what it actually decides to use. `SkillToolset` gives an agent four tools of its own, `list`, `load`, `load a resource`, and `run a script`, and the model decides when to reach for each. The previous lesson also confirmed something worth actually seeing work, not just reading about: a Skill, a plain function tool, and an `AgentTool` can all sit on the same agent at once, resolved together with no special handling. This lesson builds three skills, from the simplest possible shape up to a scripted one, plus that full combination.
 
 ## The problem we're solving
 
@@ -10,7 +10,7 @@ The loan support desk needs three different kinds of capability, and they don't 
 
 **Procedure**: explaining what a loan term means, checking a PAN and pulling a credit report, or calculating an exact EMI, needs no dedicated agent of its own, just guidance, sometimes a tool, sometimes a real script. That's what Skills are for.
 
-**Judgment**: a full risk assessment, credit score plus affordability plus default history combined into a score and a band, is a heavier task than a quick lookup, worth its own dedicated agent turn with its own instruction. That's what `AgentTool` is for.
+**Judgment**: a full risk assessment, credit score plus affordability plus default history combined into a score and a band. This is a heavier task than a quick lookup, which calls for its own dedicated agent turn with its own instruction. That's what `AgentTool` is for.
 
 **Something always needed, regardless of the other two**: every customer interaction gets logged for compliance, whether it touched a skill, the risk specialist, both, or neither. That's a plain tool, sitting directly in the agent's own list, not gated behind anything.
 
@@ -465,21 +465,19 @@ loan_terms_glossary_skill = load_skill_from_dir(SKILLS_DIR / "loan-terms-glossar
 pan_credit_check_skill = load_skill_from_dir(SKILLS_DIR / "pan-credit-check")
 emi_calculator_skill = load_skill_from_dir(SKILLS_DIR / "emi-calculator")
 
-instruction = """You are a loan support assistant at an NBFC. You have
-three kinds of capability available, not one:
+instruction = """You are a loan support assistant at an NBFC. Every
+customer message needs two things from you, in this order:
 
-1. Skills, for procedures: explaining a loan term in plain language,
-   checking a PAN and credit history, or calculating an exact EMI.
-   List and load these on demand when a request needs one, don't
-   assume you already know the details.
-2. A risk assessment specialist, for judgment: when a request needs a
-   full risk score and band from an applicant's credit and loan
-   details, delegate to the risk specialist tool rather than guessing.
-3. Query logging, always available: after handling any customer
-   request, call `record_customer_query` with a short summary and a
-   category ("terms", "pan_credit", "emi", "risk", or "general"),
-   every interaction gets logged, regardless of which of the above you
-   used.
+1. A real, substantive answer to what they actually asked. For loan
+   terminology, checking a PAN and credit history, or calculating an
+   exact EMI, load the relevant skill first and use what it tells you,
+   don't assume you already know the details. For a full risk
+   assessment, delegate to the risk assessment specialist tool instead
+   of guessing.
+2. Only after you've actually answered, call `record_customer_query`
+   with a short summary and a category ("terms", "pan_credit", "emi",
+   "risk", or "general"). Logging happens in addition to answering the
+   customer, never instead of it.
 """
 
 # UnsafeLocalCodeExecutor runs whatever the model generates directly in
@@ -617,10 +615,6 @@ adk web agents
 ```
 
 Select `lesson13a_skills.skills_demo`. The trace panel here is worth lingering on more than usual: watch the tool calls for the PAN question, you should see `list_skills` or `load_skill` before `validate_pan_format` ever appears, direct, visible confirmation that the tool genuinely wasn't available until the skill was loaded, not just something the lesson claims happens. Compare that against the moratorium question's trace, `load_skill` still fires, but no new tool ever appears afterward, the visible difference between a skill that unlocks something and one that doesn't.
-
-## If you're coming from LangChain or LangGraph
-
-There's no single, standard equivalent here, this is closer to a plugin or extension system than anything LangChain ships as a core primitive. The closest comparison is a retrieval step that fetches relevant documentation before a task, except what's being fetched isn't reference material to read, it's instructions and tools the agent can actually act on, and the fetching is a tool call the model makes itself, not a pipeline step wired in ahead of time.
 
 ## In this lesson
 

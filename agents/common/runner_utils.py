@@ -69,7 +69,9 @@ async def run_agent_query(
     Returns:
         The agent's final response text for this turn.
     """
-    session = await get_or_create_session(session_service, app_name, user_id, session_id)
+    session = await get_or_create_session(
+        session_service, app_name, user_id, session_id
+    )
 
     runner = Runner(
         app_name=app_name,
@@ -80,15 +82,15 @@ async def run_agent_query(
 
     user_message = types.Content(role="user", parts=[types.Part(text=query)])
 
-    final_response_text = "(no response received)"
+    text_segments = []
     async for event in runner.run_async(
         user_id=user_id,
         session_id=session.id,
         new_message=user_message,
     ):
-        if event.is_final_response() and event.content and event.content.parts:
-            final_response_text = "".join(
-                part.text for part in event.content.parts if part.text
-            )
+        if event.content and event.content.parts:
+            text = "".join(part.text for part in event.content.parts if part.text)
+            if text:
+                text_segments.append(text)
 
-    return final_response_text
+    return "\n\n".join(text_segments) if text_segments else "(no response received)"

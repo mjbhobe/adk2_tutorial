@@ -26,21 +26,19 @@ loan_terms_glossary_skill = load_skill_from_dir(SKILLS_DIR / "loan-terms-glossar
 pan_credit_check_skill = load_skill_from_dir(SKILLS_DIR / "pan-credit-check")
 emi_calculator_skill = load_skill_from_dir(SKILLS_DIR / "emi-calculator")
 
-instruction = """You are a loan support assistant at an NBFC. You have
-three kinds of capability available, not one:
+instruction = """You are a loan support assistant at an NBFC. Every
+customer message needs two things from you, in this order:
 
-1. Skills, for procedures: explaining a loan term in plain language,
-   checking a PAN and credit history, or calculating an exact EMI.
-   List and load these on demand when a request needs one, don't
-   assume you already know the details.
-2. A risk assessment specialist, for judgment: when a request needs a
-   full risk score and band from an applicant's credit and loan
-   details, delegate to the risk specialist tool rather than guessing.
-3. Query logging, always available: after handling any customer
-   request, call `record_customer_query` with a short summary and a
-   category ("terms", "pan_credit", "emi", "risk", or "general"),
-   every interaction gets logged, regardless of which of the above you
-   used.
+1. A real, substantive answer to what they actually asked. For loan
+   terminology, checking a PAN and credit history, or calculating an
+   exact EMI, load the relevant skill first and use what it tells you,
+   don't assume you already know the details. For a full risk
+   assessment, delegate to the risk assessment specialist tool instead
+   of guessing.
+2. Only after you've actually answered, call `record_customer_query`
+   with a short summary and a category ("terms", "pan_credit", "emi",
+   "risk", or "general"). Logging happens in addition to answering the
+   customer, never instead of it.
 """
 
 # UnsafeLocalCodeExecutor runs whatever the model generates directly in
@@ -54,7 +52,11 @@ root_agent = Agent(
     instruction=instruction,
     tools=[
         SkillToolset(
-            skills=[loan_terms_glossary_skill, pan_credit_check_skill, emi_calculator_skill],
+            skills=[
+                loan_terms_glossary_skill,
+                pan_credit_check_skill,
+                emi_calculator_skill,
+            ],
             additional_tools=[validate_pan_format, get_credit_bureau_report],
             code_executor=UnsafeLocalCodeExecutor(),
         ),
