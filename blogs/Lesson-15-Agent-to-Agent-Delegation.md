@@ -1,6 +1,6 @@
 # Lesson 15: Agent-to-Agent Delegation (A2A)
 
-`AgentTool` (Lesson 11d) reaches another agent, but one living in your own process, your own code, your own deploy. MCP (Lesson 14) reaches outside your process, but only for tools and data, not another agent's own reasoning. A2A (Agent-to-Agent) is the remaining case: reaching an entire other *agent*, one that lives in a genuinely separate process, possibly owned by a different team, possibly built on a completely different framework, over an open, cross-vendor protocol rather than an import or a direct function call.
+`AgentTool` (Lesson 11d) reaches another agent, but one living in your own process, your own code. MCP (Lesson 14) reaches outside your process, but _only_ for tools and data. A2A (Agent-to-Agent) is the remaining case: reaching an entire other *agent*, one that lives in a genuinely separate process, possibly owned by a different team, possibly built on a completely different framework, over an open, cross-vendor protocol rather than an import or a direct function call.
 
 ## What A2A actually is
 
@@ -8,13 +8,13 @@ A2A defines a client-server relationship between agents, the same shape MCP defi
 
 The distinction from MCP is worth stating plainly, since the two protocols solve adjacent but different problems: MCP connects an agent to *tools and data it doesn't have*. A2A connects an agent to *another agent's own reasoning*, a full LLM-driven participant on the other end, not a function that returns a value.
 
-So how does a client agent figure out what a remote agent is actually capable of, before it ever sends it a task?
-
 ![A2A Delegation](images/A2A_Delegation.png)
+
+So how does a client agent figure out what a remote agent is actually capable of, before it ever sends it a task?
 
 ## Consider this agent
 
-Everything below is easier to follow anchored to one real agent. We'll use the `risk_specialist_agent`, which we built in Lesson `13a`:
+To understand the A2A mechanics, let's consider the `risk_specialist_agent`, which we built in Lesson `13a`:
 
 ```python
 from google.adk.agents import Agent
@@ -40,33 +40,41 @@ risk_specialist_agent = Agent(
 )
 ```
 
-By now you should should be really familiar with this code - it's a simple agent with one tool, that uses our Haiku model.
+There is nothing new here; by now you should be able to fully understand the above definition. We have used a simple agent definition, but this could very well be a `SequentialAgent`, a `ParallelAgent`, a `LoopAgent` or any other complex workflow by combining these agents - from the consumer's PoV, we shouldn't really _care_ what type of agent this is. 
 
-Before we start serving our agent over A2A, we'll need to install two more libraries. `google-adk[a2a]` and `sse_starlette`. `google-adk[a2a]` gives you `to_a2a()` and `RemoteA2aAgent`, while `sse_starlette` is a separate dependency the `a2a` SDK's server routing needs when serving an agent, not when consuming it.
+An agent that can be "consumed" over the A2A protocol needs to be _served_ on an API endpoint, so other agents can connect to it and "consume" the service(s) it offers. But before we start serving our agent over A2A, we'll need to install two more libraries into our local `uv` managed environment. `google-adk[a2a]` and `sse_starlette`. `google-adk[a2a]` gives you the `to_a2a()` and the `RemoteA2aAgent` features, and `sse_starlette` is a separate dependency the `a2a` SDK's server routing needs to serve an agent.
 
-Add these librarirs like this:
+Add these libraries to your local `uv` environment by running the following command the root `adk2_tutorial` folder in a new terminal.
 
 ```bash
+source .venv/bin/activate
 uv add "google-adk[a2a]==2.5.0" sse_starlette
 ```
 
-As before, we have pinned `google-adk[a2a]` librery to version `2.5.0`.
+As with other ADK libraries, we pin this one to version 2.5.0 too.
 
 ## Serving an agent over A2A
 
-Now here's the magic of ADK. When you want to serve this agent via the A2A protocol, this is all you do:
+To serve an Agent as an A2A server, create a new Python file with the following code:
 
 ```python
 from google.adk.a2a.utils.agent_to_a2a import to_a2a
 import uvicorn
 
-app = to_a2a(risk_specialist_agent, host="localhost", port=8001)
+# import our agent
+from risk_specialist.agent import risk_specialist_agent
+
+app = to_a2a(
+  risk_specialist_agent,  # publish which agent?
+  host="localhost",       # on which web-address?
+  port=8001               # on which port?
+)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8001)
 ```
 
-That's it! The `to_a2a()` function takes the agent and wraps it into a full A2A server, returning a Starlette app (the framework FastAPI itself is built on.
+That's it! The `to_a2a()` function takes the agent and wraps it into a full A2A server, returning a Starlette app (the framework FastAPI itself is built on). We can access this agent at `https://127.0.0.1:8001`.
 
 The `uvicorn.run(...)` at the bottom is what actually starts the server, the same pattern every FastAPI server in this series has used since Lesson 9. Save the code above as its own file (say `risk_service.py`) and run it directly, `uv run risk_service.py`, and it exposes two things automatically: the actual task-execution endpoint, and an Agent Card discovery endpoint. Nothing about `risk_specialist_agent` itself needed to change to become servable this way.
 
@@ -78,28 +86,9 @@ An A2A server advertises what it can do through an **Agent Card**, a JSON docume
 
 ### Where this file actually lives
 
-Despite how it looks, `/.well-known/agent-card.json` is **not a file path on your computer**. It's a URL path, the last part of an address like `http://localhost:8001/.well-known/agent-card.json`. The `/.well-known/` prefix is a real, standard convention (RFC 8615) for exactly this purpose, service metadata living at a predictable address, the same idea as `robots.txt` sitting at a website's root, nothing to do with your project's folder structure.
+Despite how it looks, `/.well-known/agent-card.json` is **not a file path on your computer**. It's a URL path, the last part of an address like `http://localhost:8001/.well-known/agent-card.json`. The `/.well-known/` prefix is a real, standard convention (RFC 8615) for exactly this purpose, service metadata living at a predictable address, nothing to do with your project's folder structure.
 
-More importantly: in the normal flow, **you never create this file at all**. The `to_a2a()` call above already built one, in memory, directly from `risk_specialist_agent`, name, description, and skills extracted automatically, and it started serving that card as a live response the moment the server started. Nothing was saved anywhere.
-
-### The fields, and which ones are actually required
-
-| Field | Holds | Required? |
-|---|---|---|
-| `name` | Human-readable agent name | Yes |
-| `description` | What the agent does | Yes |
-| `url` | The endpoint clients should call to interact with it | Yes |
-| `version` | The agent's own version string | Yes |
-| `capabilities` | Whether it supports streaming, push notifications, state history | Yes |
-| `default_input_modes` | MIME types the agent accepts by default, e.g. `text/plain` | Yes |
-| `default_output_modes` | MIME types the agent returns by default | Yes |
-| `skills` | The list of distinct capabilities this agent advertises | Yes |
-| `provider` | Who runs this agent | No |
-| `documentation_url` | Link to human-readable docs | No |
-| `icon_url` | Link to an icon | No |
-| `security_schemes` / `security` | What authentication this agent expects | No |
-| `preferred_transport` | `JSONRPC`, `GRPC`, or `HTTP+JSON`, defaults to `JSONRPC` | No |
-| `protocol_version` | Which A2A protocol version this agent supports, defaults to `0.3.0` | No |
+More importantly: in the normal flow, **you never create this file at all**. The `to_a2a()` call above already built one, in memory, directly from `risk_specialist_agent` by extracting its name, description, and skills are extracted automatically, and it started serving that card as a live response the moment the server started. Nothing was saved anywhere.
 
 ### The exact card `to_a2a()` generates for `risk_specialist_agent`
 
@@ -125,13 +114,39 @@ More importantly: in the normal flow, **you never create this file at all**. The
 }
 ```
 
-Every field here is one of the eight required ones. Notice `name`, `description`, and `url` come straight from the agent object and the `host`/`port` given to `to_a2a()`, nothing here needed to be written by hand.
+Notice `name`, `description`, and `url` come straight from the agent object and the `host/port` given to `to_a2a()`, nothing here needed to be written by hand.
 
 > **NOTE:** `skills` here, the field in the middle of that JSON, is A2A's own formal term for the discrete capabilities a remote agent advertises. It has nothing to do with ADK's Skills system from Lesson 13, same word, two unrelated concepts, defined by two different specifications. When you see "skills" in an Agent Card, it means "things this remote agent can do," not `SKILL.md` files.
 
+### The fields, and which ones are actually required
+
+| Field | Holds | Required? |
+|---|---|---|
+| `name` | Human-readable agent name | Yes |
+| `description` | What the agent does | Yes |
+| `url` | The endpoint clients should call to interact with it | Yes |
+| `version` | The agent's own version string | Yes |
+| `capabilities` | Whether it supports streaming, push notifications, state history | Yes |
+| `default_input_modes` | MIME types the agent accepts by default, e.g. `text/plain` | Yes |
+| `default_output_modes` | MIME types the agent returns by default | Yes |
+| `skills` | The list of distinct capabilities this agent advertises | Yes |
+| `provider` | Who runs this agent | No |
+| `documentation_url` | Link to human-readable docs | No |
+| `icon_url` | Link to an icon | No |
+| `security_schemes` / `security` | What authentication this agent expects | No |
+| `preferred_transport` | `JSONRPC`, `GRPC`, or `HTTP+JSON`, defaults to `JSONRPC` | No |
+| `protocol_version` | Which A2A protocol version this agent supports, defaults to `0.3.0` | No |
+
+> 📌 **NOTE** It's worth being _precise_ about what "optional" means here, since it's not the same for every row. 
+>
+>`preferred_transport` and `protocol_version` have real defaults built into the schema, `JSONRPC` and `0.3.0`, so the auto-generated card always includes a sensible value for both, no customization needed. 
+>
+> However there is nothing in the `Agent` definition to infer values for any of the fillowing fields: `provider`, `documentation_url`, `icon_url`, and `security_schemes/security`, so the auto-generated card leaves them out entirely.
+
+
 ### When you'd actually want a custom card instead
 
-The auto-generated card only knows what it can read off the agent object itself, it has no way to know who runs this service, or where to point people for documentation, information that genuinely isn't part of an ADK `Agent`. `to_a2a()`'s `agent_card` parameter accepts a path to a hand-written JSON file for exactly this case:
+Getting any of those four fields into the card means supplying a hand-written one instead. The auto-generated card only knows what it can read off the agent object itself, it has no way to know who runs this service, or where to point people for documentation, information that genuinely isn't part of an ADK `Agent`. `to_a2a()`'s `agent_card` parameter accepts a path to a hand-written JSON file for exactly this case:
 
 ```python
 app = to_a2a(
@@ -157,7 +172,7 @@ Reach for this when the auto-generated card is missing something you specificall
 
 ## Consuming a remote agent
 
-Now imagine a second process, a loan orchestrator, wanting to reach the server above.
+Now imagine a second process, a loan orchestrator, that needs a risk assessment for an application it's handling. The agent that can actually do that, `risk_specialist_agent`, isn't running inside this process at all anymore, it's the server just stood up above. Here's how the orchestrator reaches it.
 
 ```python
 from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
@@ -170,7 +185,7 @@ remote_agent = RemoteA2aAgent(
 
 `RemoteA2aAgent` accepts the card three different ways, confirmed directly from its own docstring: a direct `AgentCard` object, a URL to the card's JSON, or a local file path to one. The URL form is what you'll use most, point it at a running server's discovery endpoint and it resolves the rest.
 
-The detail that matters most: `RemoteA2aAgent` is itself a `BaseAgent`. Everything Lesson 11d already taught applies to it completely unchanged, wrap it in `AgentTool` for a calling agent's model to decide when to delegate, or use it directly as a sub-agent in a `SequentialAgent`. The network boundary disappears once you have one, it behaves like any other agent from that point on.
+The detail that matters most: `RemoteA2aAgent` is itself a `BaseAgent`. Everything Lesson `11d` already taught applies to it completely unchanged, wrap it in `AgentTool` for a calling agent's model to decide when to delegate, or use it directly as a sub-agent in a `SequentialAgent`. The network boundary disappears once you have one, it behaves like any other agent from that point on.
 
 ```python
 from google.adk.tools.agent_tool import AgentTool
@@ -182,7 +197,19 @@ orchestrator = Agent(
 )
 ```
 
-> **NOTE:** `RemoteA2aAgent` is marked experimental directly in ADK's own source, the same honest flag `ResumabilityConfig` carried in Lesson 12. It works, and it's what this pair of lessons is built on, but treat it as something that may still change.
+But `AgentTool` isn't the only option, it's the one for when a model needs to decide whether to delegate, the same routing judgment Lesson `11d` covered. If the remote agent's turn is always part of a fixed sequence instead, no decision needed, it slots directly into a `SequentialAgent` as an ordinary sub-agent, no wrapper at all:
+
+```python
+from google.adk.agents import SequentialAgent
+
+loan_pipeline = SequentialAgent(
+    name="loan_pipeline",
+    sub_agents=[credit_agent, remote_agent, decision_agent],
+)
+```
+
+Same `remote_agent`, two different roles, chosen the same way you'd choose between them for any local agent, AgentTool for a model's own judgment call, a plain sub-agent for a step that always runs.
+
 
 ## The task lifecycle
 
