@@ -208,6 +208,90 @@ Ask the same question you asked before. You'll get an answer from a different mo
 
 Set `USE_GEMINI_FLASH` back to `False` before moving on, since Claude Haiku is our default for the rest of the series.
 
+## Controlling Agent Behavior: Generation Hyperparameters
+
+When building production systems that require reliable facts, compliance checks, or structured data extraction, deterministic and concise output is critical. You can _tune_ how an LLM samples and formats its responses by specifying generation parameters, also called _hyperparameters_.
+
+In Google ADK 2.5.0, hyperparameters are configured using `types.GenerateContentConfig` (`from google.genai`) and passed directly into the `generate_content_config` parameter of the `Agent` constructor. This provides a unified configuration interface whether you run Gemini or Claude or any other LLM.
+
+### Core Hyperparameters
+
+| Parameter | What it Means (What it Controls) | Possible Values | Default Value |
+| :--- | :--- | :--- | :--- |
+| **`temperature`** | Controls randomness and creativity. Lower values produce deterministic, focused answers; higher values increase output variety. | 0.0 to 1.0 (Claude) / 0.0 to 2.0 (Gemini) | 0.7 to 1.0 |
+| **`max_output_tokens`** | Sets the hard upper limit on the number of generated tokens in a single response turn. | Integer $\ge 1$ (up to model output limit) | 4096 or 8192 |
+| **`top_p` (Nucleus Sampling)** | Restricts token selection to the cumulative probability threshold $p$. Lowering it eliminates the long tail of unlikely words. | 0.0 to 1.0 | 1.0 (full distribution) |
+| **`top_k`** | Limits token selection to the top $k$ most probable candidate tokens at each generation step. | Integer $\ge 1$ | 40 (Gemini; ignored by Claude) |
+
+### How to Apply Hyperparameters in Code
+
+Copy the `lesson02_first_agent` and all its contents to a new folder `lesson02a_first_agent_hyperparams`.
+
+Modify `agents/lesson02a_first_agent_hyperparams/agent.py` as shown below:
+
+```python
+"""Lesson 2: Your First Agent, with hyperparams tweaking
+
+A minimal agent that answers general banking terminology questions for
+a retail bank's customer support desk. We are showing how to tweak it's
+hyperparameters to control behavior.
+"""
+
+from google.adk.agents import Agent
+from google.adk.models.anthropic_llm import AnthropicLlm
+from google.genai import types
+
+USE_GEMINI_FLASH = False
+
+AGENT_INSTRUCTION = (
+    "You are a friendly, knowledgeable assistant for a retail bank's "
+    "customer support desk. Answer questions about common banking "
+    "terms and concepts, things like APR, EMI, KYC, and overdraft, "
+    "in plain language a first-time customer would understand. Keep "
+    "answers under 100 words. If a question requires looking at a "
+    "specific customer's account or transaction data, say so clearly "
+    "rather than guessing, since you don't have access to that data "
+    "yet in this lesson."
+)
+
+if USE_GEMINI_FLASH:
+    model = "gemini-3.5-flash-lite"
+else:
+    model = AnthropicLlm(model="claude-haiku-4-5-20251001")
+
+# Standardized generation hyperparameters for ADK 2.5.0
+generation_config = types.GenerateContentConfig(
+    temperature=0.1,
+    max_output_tokens=256,
+    top_p=0.9,
+    top_k=40,
+)
+
+root_agent = Agent(
+    name="bfsi_support_desk_agent_tuned",
+    model=model,
+    instruction=AGENT_INSTRUCTION,
+    description="Answers general retail banking terminology questions.",
+    generate_content_config=generation_config,
+)
+```
+
+This is exactly the same `Agent` definition as before, with the addition of the `generate_content_config` parameter.
+
+### Run it with `adk run`
+
+Run the following commands from the `adk2_tutorial` folder in a new shell/terminal.
+
+```bash
+# first activate your local environment
+source .venv/bin/activate # (or .venv\Scripts\activate.bat on Windows)
+uv run adk run agents/lesson02a_first_agent_hyperparams
+```
+
+You should see a similar prompt from the ADK agent. Enter the same questions as above and observe if the response is any different than before - it may or may not vary. As the same question again, and observe the difference from previous response - there should be very little difference.
+
+
+
 ## Conclusion
 
 In this lesson, we learnt how to build and test our very first agent, which could answer general questions on Retail banking terminology. In the next lesson, our agent will start doing some real work, like calculating loan EMIs and affordability for retail lending use case. 
