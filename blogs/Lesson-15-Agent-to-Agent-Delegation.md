@@ -14,7 +14,7 @@ So how does a client agent figure out what a remote agent is actually capable of
 
 ## Consider this agent
 
-Everything below is easier to follow anchored to one real agent, `risk_specialist_agent`, the same one already built in Lesson 13a:
+Everything below is easier to follow anchored to one real agent. We'll use the `risk_specialist_agent`, which we built in Lesson `13a`:
 
 ```python
 from google.adk.agents import Agent
@@ -40,17 +40,35 @@ risk_specialist_agent = Agent(
 )
 ```
 
-Nothing new here, an ordinary agent with one tool, exactly the shape you've built many times. What's new is what happens to it next.
+By now you should should be really familiar with this code - it's a simple agent with one tool, that uses our Haiku model.
+
+Before we start serving our agent over A2A, we'll need to install two more libraries. `google-adk[a2a]` and `sse_starlette`. `google-adk[a2a]` gives you `to_a2a()` and `RemoteA2aAgent`, while `sse_starlette` is a separate dependency the `a2a` SDK's server routing needs when serving an agent, not when consuming it.
+
+Add these librarirs like this:
+
+```bash
+uv add "google-adk[a2a]==2.5.0" sse_starlette
+```
+
+As before, we have pinned `google-adk[a2a]` librery to version `2.5.0`.
 
 ## Serving an agent over A2A
 
+Now here's the magic of ADK. When you want to serve this agent via the A2A protocol, this is all you do:
+
 ```python
 from google.adk.a2a.utils.agent_to_a2a import to_a2a
+import uvicorn
 
 app = to_a2a(risk_specialist_agent, host="localhost", port=8001)
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=8001)
 ```
 
-That's the whole thing. `to_a2a()` takes the agent above and wraps it into a full A2A server, returning a Starlette app (the framework FastAPI itself is built on, not FastAPI directly). Run it with `uvicorn`, same as every other server in this series, and it exposes two things automatically: the actual task-execution endpoint, and an Agent Card discovery endpoint. Nothing about `risk_specialist_agent` itself needed to change to become servable this way.
+That's it! The `to_a2a()` function takes the agent and wraps it into a full A2A server, returning a Starlette app (the framework FastAPI itself is built on.
+
+The `uvicorn.run(...)` at the bottom is what actually starts the server, the same pattern every FastAPI server in this series has used since Lesson 9. Save the code above as its own file (say `risk_service.py`) and run it directly, `uv run risk_service.py`, and it exposes two things automatically: the actual task-execution endpoint, and an Agent Card discovery endpoint. Nothing about `risk_specialist_agent` itself needed to change to become servable this way.
 
 So how does a client agent figure out what this now-running server can actually do, before it ever sends it a task?
 
