@@ -183,7 +183,29 @@ remote_agent = RemoteA2aAgent(
 )
 ```
 
-`RemoteA2aAgent` accepts the card three different ways, confirmed directly from its own docstring: a direct `AgentCard` object, a URL to the card's JSON, or a local file path to one. The URL form is what you'll use most, point it at a running server's discovery endpoint and it resolves the rest.
+`RemoteA2aAgent` accepts the card three different ways:
+
+```python
+# 1. A URL, the form you'll use most often, pointing at a running server's discovery endpoint
+remote_agent = RemoteA2aAgent(
+    name="risk_assessment_agent",
+    agent_card="http://localhost:8001/.well-known/agent-card.json",
+)
+
+# 2. A local file path to a saved card
+remote_agent = RemoteA2aAgent(
+    name="risk_assessment_agent",
+    agent_card="risk_specialist_agent_card.json",
+)
+
+# 3. A direct AgentCard object, when you already have one loaded or built in code
+remote_agent = RemoteA2aAgent(
+    name="risk_assessment_agent",
+    agent_card=my_agent_card,  # an AgentCard instance
+)
+```
+
+The URL form is what you'll use most in practice, the other two matter when you're testing against a saved card, or building one programmatically rather than fetching it live.
 
 The detail that matters most: `RemoteA2aAgent` is itself a `BaseAgent`. Everything Lesson `11d` already taught applies to it completely unchanged, wrap it in `AgentTool` for a calling agent's model to decide when to delegate, or use it directly as a sub-agent in a `SequentialAgent`. The network boundary disappears once you have one, it behaves like any other agent from that point on.
 
@@ -209,7 +231,6 @@ loan_pipeline = SequentialAgent(
 ```
 
 Same `remote_agent`, two different roles, chosen the same way you'd choose between them for any local agent, AgentTool for a model's own judgment call, a plain sub-agent for a step that always runs.
-
 
 ## The task lifecycle
 
