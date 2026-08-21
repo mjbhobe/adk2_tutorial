@@ -1,10 +1,13 @@
 # Lesson 15a: Agent-to-Agent Delegation in Practice
 
-Lesson 15 covered A2A in theory, an open protocol for one agent to reach a genuinely separate agent, running in its own process, described through a standard Agent Card. This lesson builds it for real: `risk_specialist_agent`, the same one from 13a, run as its own A2A server, and a loan orchestrator that reaches it two different ways, `AgentTool` for a model's own judgment call, and a plain sub-agent in a fixed `SequentialAgent` pipeline.
+Lesson 15 covered A2A, an open protocol for one agent to reach a genuinely separate agent, running in its own process, described through a standard Agent Card. This lesson builds it for real: `risk_specialist_agent`, the same one from 13a, run as its own A2A server, and a loan orchestrator that reaches it two different ways, `AgentTool` for a model's own judgment call, and a plain sub-agent in a fixed `SequentialAgent` pipeline.
 
 ## Step 1: Install what this needs
 
+From a new terminal run the following commands from the project root folder (`adk2_tutorial`):
+
 ```bash
+source .venv/bin/activate
 uv add "google-adk[a2a]==2.5.0" sse_starlette
 ```
 
@@ -26,20 +29,15 @@ agents/lesson15a_a2a/
     └── agent.py
 ```
 
-`risk_specialist/agent.py` is a plain agent definition, the same shape every other agent file in this series has. `risk_service.py`, at the top level, is what actually turns it into an A2A server, run directly, not through `adk web` or another agent's `main.py`. `loan_orchestrator/` is the consuming side.
+`risk_specialist/agent.py` is a plain agent definition, the same shape every other agent file in this series has. `risk_service.py`, at the top level, is what actually turns it into an A2A server. `loan_orchestrator/` is the consuming side.
 
 ## Step 3: The risk-scoring tool, reused from 13a
 
-```python
-# agents/lesson15a_a2a/risk_specialist/tools.py
+Create `agents/lesson15a_a2a/risk_specialist/tools.py`
+
+```python 
 """Lesson 15a: The risk-scoring tool, reused unchanged from 13a.
-
-@author: Manish Bhobé
-My experiments with Python, Agentic AI and ADK.
-Code shared for learning purposes only! Use at your own risk.
-No warranties or guarantees of any kind.
 """
-
 
 def calculate_risk_score(
     credit_score: int,
@@ -81,16 +79,12 @@ def calculate_risk_score(
 
 ## Step 4: Define `risk_specialist_agent`, then serve it over A2A
 
+Create `agents/lesson15a_a2a/risk_specialist/agent.py`
+
 The agent itself is a plain definition, no A2A wiring in it at all:
 
 ```python
-# agents/lesson15a_a2a/risk_specialist/agent.py
 """Lesson 15a: The risk specialist agent, plain definition, no A2A wiring.
-
-@author: Manish Bhobé
-My experiments with Python, Agentic AI and ADK.
-Code shared for learning purposes only! Use at your own risk.
-No warranties or guarantees of any kind.
 """
 
 from google.adk.agents import Agent
@@ -115,19 +109,15 @@ risk_specialist_agent = Agent(
 )
 ```
 
-Serving it over A2A is a separate concern, its own file, at the top level of this lesson's folder, not inside `risk_specialist/`:
+To serve this agent over A2A protocol, we create a separate file `risk_service.py` one level above the `risk_specialist/` folder.
 
-```python
-# agents/lesson15a_a2a/risk_service.py
+Create `agents/lesson15a_a2a/risk_service.py`
+
+```python 
 """Lesson 15a: Serve risk_specialist_agent over A2A.
 
 Run this file directly, it's a standalone server, not something
 adk web or another agent's main.py imports.
-
-@author: Manish Bhobé
-My experiments with Python, Agentic AI and ADK.
-Code shared for learning purposes only! Use at your own risk.
-No warranties or guarantees of any kind.
 """
 
 import sys
@@ -155,7 +145,7 @@ if __name__ == "__main__":
 
 Same split this series has used since Lesson 1, `agent.py` defines an agent, a separate file decides what to do with it. Here that separate file happens to start a server instead of driving a console loop.
 
-> **NOTE:** Here's the actual Agent Card this exact agent serves, confirmed by running it and querying the live endpoint directly, not written by hand:
+> 📌 **NOTE:** Here's the actual Agent Card this exact agent serves. You can confirm this by running it and querying the live endpoint `http://localhost:8001/.well-known/agent-card.json`
 >
 > ```json
 > {
@@ -191,19 +181,14 @@ Same split this series has used since Lesson 1, `agent.py` defines an agent, a s
 >   ]
 > }
 > ```
->
-> Two things worth noticing against Lesson 15's theory example: `url` isn't a top-level field here, it's nested inside `supportedInterfaces`, and `skills` isn't one clean entry, it's one per tool plus one for the agent's own instructions, with the full instruction text dumped into that entry's description. The version-to-version wire format shifts here, this is what the currently installed SDK actually produces.
+
 
 ## Step 5: Consume it, two ways
 
-```python
-# agents/lesson15a_a2a/loan_orchestrator/agent.py
-"""Lesson 15a: Two ways of consuming the remote risk_specialist_agent.
+Create `agents/lesson15a_a2a/loan_orchestrator/agent.py`
 
-@author: Manish Bhobé
-My experiments with Python, Agentic AI and ADK.
-Code shared for learning purposes only! Use at your own risk.
-No warranties or guarantees of any kind.
+```python
+"""Lesson 15a: Two ways of consuming the remote risk_specialist_agent.
 """
 
 from google.adk.agents import Agent, SequentialAgent
@@ -263,17 +248,13 @@ Same `remote_risk_agent`, used two different ways below it, and both construct w
 
 ## Step 6: Wire up main.py
 
+Create `agents/lesson15a_a2a/main.py`
+
 ```python
-# agents/lesson15a_a2a/main.py
 """Lesson 15a: Run both consuming patterns against the risk service.
 
 Start risk_service.py first, in a separate terminal, before
 running this.
-
-@author: Manish Bhobé
-My experiments with Python, Agentic AI and ADK.
-Code shared for learning purposes only! Use at your own risk.
-No warranties or guarantees of any kind.
 """
 
 import asyncio
@@ -348,26 +329,30 @@ if __name__ == "__main__":
 In the first terminal, start the server:
 
 ```bash
+cd adk2_tutorial
+source .venv/bin/activate
 cd agents/lesson15a_a2a
 uv run risk_service.py
 ```
 
-In the second, run the consuming side:
+In the second, run the consuming side from the project root folder (`adk2_tutorial`)
 
 ```bash
+source .venv/bin/activate
 uv run agents/lesson15a_a2a/main.py
 ```
 
 You should see both patterns reach the same real server and come back with the same risk assessment, a `risk_score`, `risk_band`, and `emi_to_income_ratio`, computed by `calculate_risk_score` running in the *other* process, not this one.
 
-> **NOTE:** I verified this pairing thoroughly, but couldn't run the final step myself, this sandbox has no live Anthropic API key. What I confirmed directly: the server starts and serves the real Agent Card shown above, and `main.py`'s own plumbing, imports, both agents constructing without conflict, session handling, reaching the point of making an LLM call, all work. The one thing resting on your own key is the actual model reasoning on both sides, the same limitation `13a` and `14a` had.
+> 📌 **NOTE** You will see a lot of log messages from the ADK, which makes it difficult to pick out output from our program. To suppress these messages on the console, use the `PYTHONWARNINGS=ignore` technique we introduced back in Lesson 2.
 
 ## Step 8: See the raw task lifecycle
 
 `RemoteA2aAgent` handles the entire task lifecycle from Lesson 15's theory for you, submitting a task, tracking its state, resolving the final result, none of it visible in the code you've written so far. This step skips `RemoteA2aAgent` entirely and talks to the server's own protocol endpoint directly, so you can see the actual task object underneath.
 
+Create `agents/lesson15a_a2a/peek_raw_task.py`
+
 ```python
-# agents/lesson15a_a2a/peek_raw_task.py
 """Lesson 15a: See the raw A2A task lifecycle underneath RemoteA2aAgent.
 
 RemoteA2aAgent handles all of this for you, submitting a task, polling
@@ -378,11 +363,6 @@ final answer.
 
 Start risk_service.py first, in a separate terminal, before
 running this.
-
-@author: Manish Bhobé
-My experiments with Python, Agentic AI and ADK.
-Code shared for learning purposes only! Use at your own risk.
-No warranties or guarantees of any kind.
 """
 
 import asyncio
@@ -421,13 +401,15 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Run it with the server still going in its own terminal:
+Run it in a separate terminal from the `adk2_tutorial` folder, with the server still running in its own terminal:
 
 ```bash
+cd adk2_tutorial
+source .venv/bin/activate
 uv run agents/lesson15a_a2a/peek_raw_task.py
 ```
 
-Here's the real output, no live API key available when this was run, which is exactly why this is a good demonstration, `FAILED` is one of the eight real states from Lesson 15's theory, and this is what it actually looks like on the wire, not a description of it:
+Here's the real output, no live API key available when this was run, which is exactly why this is a good demonstration, `FAILED` is one of the eight real states from Lesson 15, and this is what it actually looks like on the wire, not a description of it:
 
 ```
 Task ID: bb807bbf-f49e-4a25-ab9e-156b1fa80dba
@@ -443,10 +425,6 @@ adk web agents
 ```
 
 Select `lesson15a_a2a.loan_orchestrator`. You'll also see `lesson15a_a2a.risk_specialist` listed, don't select that one, its `agent.py` deliberately has no `root_agent`, and it also imports itself as a package in a way `adk web`'s own loading doesn't resolve the same way `risk_service.py` does. Selecting it fails with a `ModuleNotFoundError`, confirmed directly, not the friendlier "no root_agent" message you'd get otherwise. It's meant to run standalone, through `risk_service.py`, the way Step 7 does.
-
-## If you're coming from LangChain or LangGraph
-
-Neither framework has a direct, first-class equivalent to A2A specifically, cross-framework agent interop is still an emerging area industry-wide, not something any single framework has fully standardized yet. The closest LangGraph comes is invoking a remote LangServe endpoint from within a graph, conceptually similar, calling out to another agent's own service, but without a shared, open protocol or a standard discovery document like the Agent Card behind it.
 
 ## In this lesson
 
