@@ -29,7 +29,7 @@ AGENT_INSTRUCTION = (
     "answers under 100 words. If a question requires looking at a "
     "specific customer's account or transaction data, say so clearly "
     "rather than guessing, since you don't have access to that data "
-    "yet in this lesson."
+    "yet."
 )
 
 if USE_GEMINI_FLASH:

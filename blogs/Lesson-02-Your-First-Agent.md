@@ -4,13 +4,15 @@ In this lesson, we'll build and run our first working ADK agent: a simple assist
 
 We'll also see the same agent answer using two different models, Claude Haiku and Gemini Flash, by changing a single line of code! That's worth seeing early, since it tells you something true about ADK: your agent code generally doesn't change when you swap the model underneath it.
 
+We'll also see how we can _tweak_ the behavior of our agent via _hyper-parameters_ such as `temperature`, `max_tokens`, `top_p` and `top_k`.
+
 ![Basic Agent](images/Basic%20Agent.png)
 
 ## Step 1: Create the agent folder
 
 Every ADK agent lives in its own folder with a specific, small structure: an `agent.py` file that defines and exports a `root_agent`, and an `__init__.py` that imports it so ADK can find it.
 
-Open the project root folder (`adk2_tutorial`) in a terminal and run the following command:
+Open the project root folder (`adk2_tutorial`) in a terminal and run the following commands:
 
 ```bash
 # On Linux/Mac
@@ -52,7 +54,7 @@ AGENT_INSTRUCTION = (
     "answers under 100 words. If a question requires looking at a "
     "specific customer's account or transaction data, say so clearly "
     "rather than guessing, since you don't have access to that data "
-    "yet in this lesson."
+    "yet."
 )
 
 if USE_GEMINI_FLASH:
@@ -78,15 +80,17 @@ That's it! That's your whole agent 😮. Three required attributes: a `model`, a
 
 ## What each parameter in `Agent(...)` actually does
 
-Before we move on, it's worth knowing what each of the parameters we have used in the `Agent`'s constructor above actually does, since we'll use all of them in every agent we'll build for the rest of this series.
+Before we move on, it's worth knowing what each of the parameters of the `Agent`'s constructor actually do, since we'll use all of them in every agent we'll build for the rest of this series.
 
-- **`name`** (mandatory) — a unique identifier for this agent. ADK enforces two rules on it: **it must be a valid Python identifier** (same rules as naming a Python variable - letters, digits, underscores, no spaces or hyphens, can't start with a digit), and **it can't be the literal string `"user"`** (ADK reserves `user` for the end user's own input). Once you start building multi-agent systems, this name is also how one agent refers to another, so it's worth naming agents descriptively from the start, the way we did with `bfsi_support_desk_agent`.
+- **`name`** (mandatory❗) — a unique identifier for this agent. ADK enforces two rules on it: **it must be a valid Python identifier** (same rules as naming a Python variable - letters, digits, underscores, no spaces or hyphens, can't start with a digit), and **it can't be the literal string `"user"`** (ADK reserves `user` for the end user's own input). Once you start building multi-agent systems, this name is also how one agent refers to another, so it's worth naming agents descriptively from the start, the way we did with `bfsi_support_desk_agent`.
 
-- **`model`** (mandatory) — which LLM answers on this agent's behalf, either a plain string (for models ADK resolves natively, like Gemini) or a model object you construct yourself (as we just did for Claude, with `AnthropicLlm(...)`). This is the one parameter you'll see change the most across the series as we swap between Haiku, Sonnet, and Gemini Flash depending on the lesson.
+- **`model`** (mandatory❗) — which LLM answers on this agent's behalf, either a plain string (for models ADK resolves natively, like Gemini) or a model object you construct yourself (as we just did for Claude, with `AnthropicLlm(...)`). This is the one parameter you'll see change the most across the series as we swap between Haiku, Sonnet, and Gemini Flash depending on the lesson.
 
-- **`instruction`** (mandatory) — the system prompt: your agent's standing directions for how to behave, what tone to use, and what it should and shouldn't do. This is the single biggest lever you have over an agent's behavior, and it's worth spending real time on. Later in the series, once we cover sessions and state, you'll see this field can also contain placeholders like `{customer_name}` that get filled in from live conversation data, rather than being fixed text like it is here.
+- **`instruction`** (mandatory❗) — the system prompt: your agent's standing directions for how to behave, what tone to use, and what it should and shouldn't do. This is the single biggest lever you have over an agent's behavior, and it's worth spending real time on. Later in the series, once we cover sessions and state, you'll see this field can also contain placeholders like `{customer_name}` that get filled in from live conversation data, rather than being fixed text like it is here.
 
 - **`description`** (optional) — a short, one-line summary of what this agent does, separate from `instruction`. It doesn't affect how the agent behaves at all. It matters once an agent has other agents working under it: the parent uses each sub-agent's `description` to decide which one to hand a task to - so when it comes to multi-agent systems, treat this as mandatory. In this lesson, with a single standalone agent, it's doing nothing functionally yet, but it's good practice to write it accurately from the start, since it becomes load-bearing the moment this agent joins a larger system in later lessons.
+
+> 📌 **NOTE** These arn't the only attributes of the `Agent`'s constructor. There are many more, which we will gradually _expose_ in later lessons.
 
 ## A caveat worth knowing: Claude and Gemini aren't resolved the same way
 
@@ -113,12 +117,11 @@ When you give ADK a plain model name string, it looks the name up against a set 
 >)
 > ```
 >
-> `LiteLlm` is a great option when you want to interface your ADK agents with a variety of LLM providers, such as OpenAI, Anthropic, Google, Llama etc. We have chosen Claude as our model of choice in this lesson series, and we fall back to Gemini only where ADK mandates using Gemini, so there is no advantage of using `LiteLlm` in this series. 
+> `LiteLlm` is a great option when you want to interface your ADK agents with a variety of LLM providers, such as OpenAI, Anthropic, Google, Llama etc. We have chosen Claude as our model of choice in this lesson series, and we fall back to Gemini only where ADK mandates using Gemini, so there is no advantage of using `LiteLlm` in this series.
 
+## Step 3: Run the Agent with `adk run`
 
-## Step 3: Run it with `adk run`
-
-`adk run` gives you a command-line chat loop, the fastest way to test an agent. From the project root (i.e. from `adk2_tutorial` folder) run the following command:
+`adk run` gives you a command-line chat loop, the fastest way to test an agent. Start a new terminal and run the following commands from the project root (i.e. from `adk2_tutorial` folder):
 
 ```bash
 # first activate your local environment
@@ -130,7 +133,7 @@ uv run adk run agents/lesson02_first_agent
 >
 > And _yes_, the `uv run adk run ...` command is correct! It's using `uv` to run the `adk run` command 😊.
 
-If all runs correctly, you'll see a bunch of logging information printed on your console, which you can safely ignore, followed by this: 
+If all runs correctly, you'll see a bunch of logging information printed on your console, which you can safely ignore, followed by this:
 
 ```bash
 Running agent bfsi_support_desk_agent, type exit to exit.
@@ -171,14 +174,16 @@ Try a couple more terms if you like: EMI, KYC, overdraft. Type `exit` or press `
 >
 > This will suppress MOST of the messages, making for a much cleaner screen 😊.
 
-
 ## Step 4: Run it with `adk web`
 
-`adk web` starts a local browser-based chat UI, and it becomes genuinely useful once you have more than one agent in your project, since it lists every agent it finds in a dropdown. Run it from your project root, pointing at the `agents/` folder rather than this one lesson's subfolder:
+`adk web` starts a local browser-based chat UI, and it becomes genuinely useful once you have more than one agent in your project, since it lists every agent it finds in a dropdown. Run it from your project root (`adk2_tutorial`), pointing at the `agents/` folder rather than this one lesson's subfolder:
 
 ```bash
+source .venv/bin/activate
 uv run adk web agents
 ```
+
+> 📌 **NOTE:** we are pointing to the _parent_ `agents` folder, not the sub-folder holding the code for this lesson!
 
 ADK will print a local URL, typically `http://127.0.0.1:8000`. Open it in your browser and you'll see something like this:
 
@@ -190,7 +195,11 @@ You'll see a dropdown with one entry, `lesson02_first_agent`, select it, and you
 
 Right now there's only one agent to pick from, but by the time we're a few lessons in, this dropdown will hold several, which is exactly why the project is structured this way.
 
-## Step 5: Switch to Gemini Flash model 
+> 📌 **NOTE:** If you are coding along with us, then you will see only one entry, `lesson02_first_agent`, in the dropdown. 
+>
+> However, if you dowloaded the repo from GitHub and are running this lesson, you will see many more entries in the drop down - pick `lesson02_first_agent`
+
+## Step 5: Switch to Gemini Flash model
 
 Open `agent.py` and change one line:
 
@@ -251,7 +260,7 @@ AGENT_INSTRUCTION = (
     "answers under 100 words. If a question requires looking at a "
     "specific customer's account or transaction data, say so clearly "
     "rather than guessing, since you don't have access to that data "
-    "yet in this lesson."
+    "yet."
 )
 
 if USE_GEMINI_FLASH:
@@ -276,7 +285,7 @@ root_agent = Agent(
 )
 ```
 
-This is exactly the same `Agent` definition as before, with the addition of the `generate_content_config` parameter.
+This is exactly the same `Agent` definition as before, with the addition of the `generate_content_config` parameter to the Agent's constructor and the lines the instantiate the `generation_config` itself.
 
 ### Run it with `adk run`
 
@@ -290,8 +299,14 @@ uv run adk run agents/lesson02a_first_agent_hyperparams
 
 You should see a similar prompt from the ADK agent. Enter the same questions as above and observe if the response is any different than before - it may or may not vary. As the same question again, and observe the difference from previous response - there should be very little difference.
 
+Things to try:
+
+* Vary the `temperature` (in the `generation_config = types.GenerateContentConfig(...)` part ) - try values like `0.5` or `1.0` and observe how your Agent behaves when you repeat the question. Higher temperarture values should generate move varied responses each time.
+* Increase/reduce `max_tokens` and use the same questions and check if length of the response changes.
 
 
 ## Conclusion
 
-In this lesson, we learnt how to build and test our very first agent, which could answer general questions on Retail banking terminology. In the next lesson, our agent will start doing some real work, like calculating loan EMIs and affordability for retail lending use case. 
+In this lesson, we learnt how to build and test our very first agent, which could answer general questions on Retail banking terminology. We also saw how we could easily _swap_ the LLM used by the Agent and how to vary the _hyper-parameters_ that determine Agent behavior. For brevity, we won't be using the `ypes.GenerateContentConfig(...)` in the coming lessons, but it's important to note that it's the mechanism you'd use in Production to _tweak_ agent behavior. You **should use it** in Production!
+
+In the next lesson, our agent will start doing some real work, like calculating loan EMIs and affordability for retail lending use case. 
