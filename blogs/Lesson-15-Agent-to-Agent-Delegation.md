@@ -96,8 +96,14 @@ More importantly: in the normal flow, **you never create this file at all**. The
 {
   "name": "risk_specialist_agent",
   "description": "Assesses loan risk given credit and applicant details, and returns a risk score and band.",
-  "url": "http://localhost:8001/",
-  "version": "1.0.0",
+  "supportedInterfaces": [
+    {
+      "url": "http://localhost:8001",
+      "protocolBinding": "JSONRPC",
+      "protocolVersion": "1.0"
+    }
+  ],
+  "version": "0.0.1",
   "capabilities": {
     "streaming": false,
     "pushNotifications": false
@@ -106,15 +112,22 @@ More importantly: in the normal flow, **you never create this file at all**. The
   "defaultOutputModes": ["text/plain"],
   "skills": [
     {
-      "id": "calculate_risk_score",
+      "id": "risk_specialist_agent",
+      "name": "model",
+      "description": "Assesses loan risk given credit and applicant details, and returns a risk score and band. I am a loan risk specialist. Given an applicant's credit_score, annual_income, loan_amount, tenure_months, and has_defaults, call calculate_risk_score with those five values and report the risk_score, risk_band, and emi_to_income_ratio back. Always call the tool. Never estimate the score yourself.",
+      "tags": ["llm"]
+    },
+    {
+      "id": "risk_specialist_agent-calculate_risk_score",
       "name": "calculate_risk_score",
-      "description": "Assesses loan risk given credit and applicant details, and returns a risk score and band."
+      "description": "Calculates a deterministic risk score for a loan application...",
+      "tags": ["llm", "tools"]
     }
   ]
 }
 ```
 
-Notice `name`, `description`, and `url` come straight from the agent object and the `host/port` given to `to_a2a()`, nothing here needed to be written by hand.
+Notice `name`, `description`, and `url` come straight from the agent object. The endpoint URL sits inside `supportedInterfaces`, not as a top-level url field, one entry per interface the server supports. `skills` here isn't one clean entry either, it's one per tool, plus one for the agent's own instructions, with the full instruction text folded into that entry's description. Nothing here needed to be written by hand.
 
 > **NOTE:** `skills` here, the field in the middle of that JSON, is A2A's own formal term for the discrete capabilities a remote agent advertises. It has nothing to do with ADK's Skills system from Lesson 13, same word, two unrelated concepts, defined by two different specifications. When you see "skills" in an Agent Card, it means "things this remote agent can do," not `SKILL.md` files.
 
@@ -142,7 +155,6 @@ Notice `name`, `description`, and `url` come straight from the agent object and 
 >`preferred_transport` and `protocol_version` have real defaults built into the schema, `JSONRPC` and `0.3.0`, so the auto-generated card always includes a sensible value for both, no customization needed. 
 >
 > However there is nothing in the `Agent` definition to infer values for any of the fillowing fields: `provider`, `documentation_url`, `icon_url`, and `security_schemes/security`, so the auto-generated card leaves them out entirely.
-
 
 ### When you'd actually want a custom card instead
 
