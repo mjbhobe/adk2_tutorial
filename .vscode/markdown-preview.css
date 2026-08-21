@@ -1,0 +1,5 @@
+/* Custom font size for inline code and fenced code blocks in Markdown Preview */
+code, pre code {
+    font-size: 14px !important; /* Adjust to match your editor font size */
+    line-height: 1.4;
+}
