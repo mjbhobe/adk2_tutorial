@@ -6,7 +6,7 @@ entirely and talks to the server's own protocol endpoint directly, so
 you can see the actual task object A2A passes around, not just the
 final answer.
 
-Start risk_service/agent.py first, in a separate terminal, before
+Start risk_service.py first, in a separate terminal, before
 running this.
 
 @author: Manish Bhobé

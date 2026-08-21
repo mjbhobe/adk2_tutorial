@@ -1,24 +1,23 @@
 # Lesson 15a: Agent-to-Agent Delegation in Practice
 
-Lesson 15 covered A2A, an open protocol for one agent to reach a genuinely separate agent running in its own process, described through a standard Agent Card. This lesson builds it for real: `risk_specialist_agent`, the same one from 13a, run as its own A2A server, and a loan orchestrator that reaches it two different ways, `AgentTool` for a model's own judgment call, and a plain sub-agent in a fixed `SequentialAgent` pipeline.
+Lesson 15 covered A2A in theory, an open protocol for one agent to reach a genuinely separate agent, running in its own process, described through a standard Agent Card. This lesson builds it for real: `risk_specialist_agent`, the same one from 13a, run as its own A2A server, and a loan orchestrator that reaches it two different ways, `AgentTool` for a model's own judgment call, and a plain sub-agent in a fixed `SequentialAgent` pipeline.
 
 ## Step 1: Install what this needs
 
-Open a new terminal and run the following commands from the project root (`adk2_tutorial`) folder:
-
 ```bash
-source .venv/bin/activate
 uv add "google-adk[a2a]==2.5.0" sse_starlette
 ```
 
-`google-adk[a2a]` gives you `to_a2a()` and `RemoteA2aAgent`. `sse_starlette` is a separate dependency the `a2a` SDK's server routing needs, only required for the server side, `risk_service/agent.py` below, not for the consuming side.
+`google-adk[a2a]` gives you `to_a2a()` and `RemoteA2aAgent`. `sse_starlette` is a separate dependency the `a2a` SDK's server routing needs, only required for the server side, `risk_service.py` below, not for the consuming side.
 
 ## Step 2: Set up the folder structure
 
 ```
 agents/lesson15a_a2a/
 ├── main.py
-├── risk_service/
+├── risk_service.py
+├── peek_raw_task.py
+├── risk_specialist/
 │   ├── __init__.py
 │   ├── agent.py
 │   └── tools.py
@@ -27,14 +26,18 @@ agents/lesson15a_a2a/
     └── agent.py
 ```
 
-`risk_service/` is a standalone server, run directly, not through `adk web` or another agent's `main.py`. `loan_orchestrator/` is the consuming side.
+`risk_specialist/agent.py` is a plain agent definition, the same shape every other agent file in this series has. `risk_service.py`, at the top level, is what actually turns it into an A2A server, run directly, not through `adk web` or another agent's `main.py`. `loan_orchestrator/` is the consuming side.
 
-## Step 3: The risk-scoring tool
-
-Create `agents/lesson15a_a2a/risk_service/tools.py`
+## Step 3: The risk-scoring tool, reused from 13a
 
 ```python
+# agents/lesson15a_a2a/risk_specialist/tools.py
 """Lesson 15a: The risk-scoring tool, reused unchanged from 13a.
+
+@author: Manish Bhobé
+My experiments with Python, Agentic AI and ADK.
+Code shared for learning purposes only! Use at your own risk.
+No warranties or guarantees of any kind.
 """
 
 
@@ -76,33 +79,24 @@ def calculate_risk_score(
     return {"risk_score": score, "risk_band": band, "emi_to_income_ratio": ratio}
 ```
 
-## Step 4: Serve `risk_specialist_agent` over A2A
+## Step 4: Define `risk_specialist_agent`, then serve it over A2A
 
-Create `agents/lesson15a_a2a/risk_service/agent.py`
+The agent itself is a plain definition, no A2A wiring in it at all:
 
 ```python
-"""Lesson 15a: The risk specialist, exposed as an A2A server.
+# agents/lesson15a_a2a/risk_specialist/agent.py
+"""Lesson 15a: The risk specialist agent, plain definition, no A2A wiring.
 
-Run this file directly, it's a standalone server, not something
-adk web or another agent's main.py imports.
+@author: Manish Bhobé
+My experiments with Python, Agentic AI and ADK.
+Code shared for learning purposes only! Use at your own risk.
+No warranties or guarantees of any kind.
 """
 
-import sys
-from pathlib import Path
-
-from dotenv import load_dotenv
-
-load_dotenv(override=True)
-
-THIS_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(THIS_DIR.parents[1]))  # adds agents/ for common.*
-sys.path.insert(0, str(THIS_DIR.parent))  # adds lesson15a_a2a/ for risk_service.*
-
-from google.adk.a2a.utils.agent_to_a2a import to_a2a
 from google.adk.agents import Agent
 
 from common.model_config import get_model
-from risk_service.tools import calculate_risk_score
+from risk_specialist.tools import calculate_risk_score
 
 instruction = """You are a loan risk specialist. Given an applicant's
 credit_score, annual_income, loan_amount, tenure_months, and
@@ -119,6 +113,37 @@ risk_specialist_agent = Agent(
     instruction=instruction,
     tools=[calculate_risk_score],
 )
+```
+
+Serving it over A2A is a separate concern, its own file, at the top level of this lesson's folder, not inside `risk_specialist/`:
+
+```python
+# agents/lesson15a_a2a/risk_service.py
+"""Lesson 15a: Serve risk_specialist_agent over A2A.
+
+Run this file directly, it's a standalone server, not something
+adk web or another agent's main.py imports.
+
+@author: Manish Bhobé
+My experiments with Python, Agentic AI and ADK.
+Code shared for learning purposes only! Use at your own risk.
+No warranties or guarantees of any kind.
+"""
+
+import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
+THIS_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(THIS_DIR.parent))  # adds agents/ for common.*
+sys.path.insert(0, str(THIS_DIR))  # adds this lesson's own folder for risk_specialist.*
+
+from google.adk.a2a.utils.agent_to_a2a import to_a2a
+
+from risk_specialist.agent import risk_specialist_agent
 
 app = to_a2a(risk_specialist_agent, host="localhost", port=8001)
 
@@ -128,7 +153,7 @@ if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8001)
 ```
 
-Notice the two `sys.path` lines, this file needs both `agents/`, for `common.model_config`, and its own parent, `lesson15a_a2a/`, for `risk_service.tools` to resolve as a package from inside itself. Miss either one and the import fails.
+Same split this series has used since Lesson 1, `agent.py` defines an agent, a separate file decides what to do with it. Here that separate file happens to start a server instead of driving a console loop.
 
 > **NOTE:** Here's the actual Agent Card this exact agent serves, confirmed by running it and querying the live endpoint directly, not written by hand:
 >
@@ -188,7 +213,7 @@ from google.adk.tools.agent_tool import AgentTool
 from common.model_config import get_model
 
 # Same RemoteA2aAgent instance, two different roles below. The URL points
-# at risk_service/agent.py's own server, which must already be running,
+# at risk_service.py's own server, which must already be running,
 # in a separate terminal, before either of these is used.
 remote_risk_agent = RemoteA2aAgent(
     name="risk_assessment_agent",
@@ -242,7 +267,7 @@ Same `remote_risk_agent`, used two different ways below it, and both construct w
 # agents/lesson15a_a2a/main.py
 """Lesson 15a: Run both consuming patterns against the risk service.
 
-Start risk_service/agent.py first, in a separate terminal, before
+Start risk_service.py first, in a separate terminal, before
 running this.
 
 @author: Manish Bhobé
@@ -324,7 +349,7 @@ In the first terminal, start the server:
 
 ```bash
 cd agents/lesson15a_a2a
-uv run risk_service/agent.py
+uv run risk_service.py
 ```
 
 In the second, run the consuming side:
@@ -351,7 +376,7 @@ entirely and talks to the server's own protocol endpoint directly, so
 you can see the actual task object A2A passes around, not just the
 final answer.
 
-Start risk_service/agent.py first, in a separate terminal, before
+Start risk_service.py first, in a separate terminal, before
 running this.
 
 @author: Manish Bhobé
@@ -417,7 +442,7 @@ The full task object underneath, also real output, shows exactly why: an `adk_er
 adk web agents
 ```
 
-Select `lesson15a_a2a.loan_orchestrator`. You'll also see `lesson15a_a2a.risk_service` listed, don't select that one, it has no `root_agent` by design, it's meant to run standalone the way Step 7 does, and selecting it in `adk web` fails with exactly that error.
+Select `lesson15a_a2a.loan_orchestrator`. You'll also see `lesson15a_a2a.risk_specialist` listed, don't select that one, its `agent.py` deliberately has no `root_agent`, and it also imports itself as a package in a way `adk web`'s own loading doesn't resolve the same way `risk_service.py` does. Selecting it fails with a `ModuleNotFoundError`, confirmed directly, not the friendlier "no root_agent" message you'd get otherwise. It's meant to run standalone, through `risk_service.py`, the way Step 7 does.
 
 ## If you're coming from LangChain or LangGraph
 

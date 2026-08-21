@@ -13,7 +13,7 @@ from google.adk.tools.agent_tool import AgentTool
 from common.model_config import get_model
 
 # Same RemoteA2aAgent instance, two different roles below. The URL points
-# at risk_service/agent.py's own server, which must already be running,
+# at risk_service.py's own server, which must already be running,
 # in a separate terminal, before either of these is used.
 remote_risk_agent = RemoteA2aAgent(
     name="risk_assessment_agent",

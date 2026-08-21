@@ -1,6 +1,6 @@
 """Lesson 15a: Run both consuming patterns against the risk service.
 
-Start risk_service/agent.py first, in a separate terminal, before
+Start risk_service.py first, in a separate terminal, before
 running this.
 
 @author: Manish Bhobé
