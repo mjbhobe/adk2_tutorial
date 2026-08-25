@@ -16,19 +16,19 @@ This split matters even more in BFSI than most domains. A loan does not always f
 
 When it comes to graphs, there are four team you should be intimately familiar with. So spend enough time to understand these cold.
 
-**Node.** A node is one unit of work in the graph. Technically speaking, a node can be anything that inherits a `BaseNode` class. In most cases, you'll use plain Python functions annotated with `@node` as your graph nodes. Incidentally, annotating with `@node` makes a plain Python function behave like a `BaseNode`. 
+**Node.** A node is one unit of work in the graph. Technically speaking, a node can be anything that inherits a `BaseNode` class. In most cases, you'll use plain Python functions annotated with `@node` decorator as your graph nodes. Incidentally, annotating with `@node` makes a plain Python function behave like a `BaseNode`.
 
-However, a node can also wrap other things, such as an `Agent`, a tool, or even another `Workflow`! These don't require the `@node` decorator as they already inherit from `BaseNode` class. 
+However, a node can also wrap other things, such as an `Agent`, a tool, or even another `Workflow`! These don't require the `@node` decorator as they already inherit from `BaseNode` class.
 
 A node takes some input, does something with it, and returns a result, which is passed down to the next node in the workflow or back to the user as the result.
+
+`START` is a special node provide by the ADK. It is a fixed sentinal that indicates the marks the entry point of your graph. **You do nothing with `START`**. Every graph must begin with `START`. **However, unlike LangGraph, there is no `END` sentinal that marks the end of the graph**.
 
 **Edge.** An edge is a connection from one node to another. The _simplest edge_ just means "when this node finishes, run that node next." A _conditional edge_ means "when this node finishes, look at which route it chose, and run whichever node matches that route." Edges are what turn a pile of nodes into an actual graph. Values returned from a node flow down the edges to the next node in sequence.
 
 **Graph.** The graph is the full map, every node and every edge, considered together. You do not usually build a `Graph` object directly. You hand `Workflow` a list of edges, and it builds the graph for you.
 
 **Workflow.** `Workflow` is the object that actually runs the graph. You give it a name and a list of edges. It works out the nodes from those edges automatically, validates that the graph makes sense, and knows how to execute it, start to finish, following whichever path the data takes.
-
-There is one more name you need before any of this can run: `START`. It is a fixed sentinel value, not something you create, that marks the entry point of the graph. Every graph in this lesson begins with an edge from `START` to whichever node should run first. **Unlike LangGraph, there is no `END` special node that marks the end of the graph**.
 
 ## Getting data in and out of a graph
 
@@ -46,8 +46,8 @@ You initialize the context state before calling the graph, just like we initiize
 
 Every node function can declare up to three kinds of parameters, and the framework binds each one differently:
 
-- `ctx`, if you declare it, gives you the node's execution context. You use it to set `ctx.route` for conditional branching, among other things.
-- `node_input`, if you declare it, gives you whatever the previous node returned, or the original input if this is the first node.
+- `ctx`, if you declare it, gives you the node's execution context. You use it to set `ctx.route` for conditional branching and to read/write variables to context.
+- `node_input`, if you declare it, gives you whatever the previous node returned, or the original input if this is the first node after `START`.
 - Any other named parameter you declare gets its value from `ctx.state`. Declare a parameter called `manual_review_limit`, and the framework looks for a key named `manual_review_limit` in `ctx.state` and passes its value in. You do not write any code linking the two, the name is the whole connection. You will see this directly below, in the node that decides whether a loan needs manual review.
 
 A single node can use all three at once. You will see this directly in Part 4, in the node that decides whether a loan needs manual review.
