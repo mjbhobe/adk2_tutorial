@@ -1,27 +1,64 @@
-# Lesson 16a: LLM Nodes
+# Lesson 16a: LLMs As Nodes
 
-## Why this lesson matters
+The previous lesson introduced `Workflow` as a way to build clear and controlled graph-based processes. Unlike a single LLM agent that decides every step, a workflow makes the process explicit and traceable. We covered its main components: `nodes`, `edges`, `graphs`, and the `Workflow` that runs them.
 
-Every node in Lesson 16 was deterministic. Given the same loan amount, `calculate_deductions` always returns the same fee, `check_compliance_threshold` always routes the same way. That is exactly right for math and for rules, and exactly wrong for one more step this graph actually needs: writing the message that goes back to the customer. There is no formula for "explain this decision in plain language, reassuring but honest." That step needs judgment, so it needs a model, and now it needs to live inside the graph as a real node, not bolted on afterward.
+We built two workflow patterns: A `sequential workflow`, which runs nodes in a fixed serial order, and a `branching workflow` uses business logic to choose between different paths and then join them again. We also saw how `node_input` passes data between nodes and how `ctx.state` shares data across the graph. For all nodes of these workflows, we used deterministic functions annotated with the `@node` decorator. Deterministic functions as noded worked here because each node performed a definate mathematical calculations or routing.
 
-This lesson shows you how. An `Agent` can be a node in a `Workflow`, wired in exactly the same way as any function node, with edges pointing in and out of it like any other. You will extend the loan disbursement graph from Lesson 16 with one, see the two modes an `Agent` node can run in, and see what happens when a graph ends in more than one place.
+However, some steps cannot be written as a deterministic functions. Take the message that needs to go back to the customer once a decision is made. `auto-cleared` or `pending review`, someone still has to explain that decision in plain language, reassuring but honest, and there is no formula for that. That step needs judgment and text generation, an LLM's core capability, not a fixed rule. An ADK `Agent` is built for exactly this and it can work as a node in a workflow!
+
+## What this lesson covers
+
+This lesson shows you how an `Agent` can be a node in a `Workflow`, wired in exactly the same way as any function node we saw in the previous lesson, with edges pointing in and out of it like any other node. We will extend the loan disbursement graph from Lesson 16 by adding an _Agent node_ that composes the final note that goes out to the customer.
 
 ## Part 1: Dropping an Agent into a graph
 
-An `Agent` needs no `@node` decorator. You already saw why in Lesson 16, `Workflow` accepts a `Workflow` as a node because a `Workflow` is a `BaseNode` underneath. An `Agent` is the same story: it is a `BaseNode` too, so it goes straight into an edges tuple, no wrapping required.
+An `Agent` needs no `@node` decorator. Lesson 16 mentioned that a node can wrap a plain function, an `Agent`, or even another `Workflow`, without saying why that last one works. Here is why: `Workflow` is itself a `BaseNode` under the hood, and so is `Agent`. Anywhere the graph accepts a node, it accepts anything built on `BaseNode`, no special casing needed.
+
+Dropping an `Agent` into a workflow is very simple. Just add the variable that points to the Agent into the workflow. Suppose we define a `draft_notification` agent like this, in some `agent.py` file in our directory structure as we have been doing so far:
 
 ```python
-edges=[(START, calculate_deductions, draft_notification)]
+# partial contents of agent.py file
+from google.adk.agents import Agent
+from common.model_config import get_model
+
+from .tools import ....
+
+
+INSTRUCTION = """
+.... agents instructions
+"""
+
+draft_notification = Agent(
+    name="draft_notification",
+    description="Drafts a notfication email...",
+    model=get_model("primary"),
+    instruction=INSTRUCTION,
+    tools=[...],
+    ...
+)
 ```
 
-That line would be entirely correct if `draft_notification` were an `Agent` instead of a function. The graph does not care which kind of node it is talking to.
+The above definition is one we should be intimately familiar with by now.
 
-There is one thing to decide, though: how the agent behaves as a node. `Agent` has a `mode` field with three values, `chat`, `single_turn`, and `task`. `chat` is for multi-agent transfer scenarios, not something a graph node needs, so this lesson leaves it alone entirely. The two that matter here:
+```python
+# in the file where we define the workflow
+from ... import draft_notification 
 
-- **`single_turn`**: the node receives its input, the model replies once, and that reply is the node's output. One exchange, done.
-- **`task`**: the node can call tools across several rounds, deciding for itself how many rounds it needs, and only finishes when it explicitly says so.
+my_workflow = Workflow(
+    name="my_workflow_name",
+    edges=[(START, calculate_deductions, draft_notification)],
+)
+```
 
-If you do not set `mode` at all on a standalone `Agent` used as a node, it defaults to `single_turn`. You never have to ask for the simple case. `task` mode, on the other hand, always has to be requested explicitly, since a node that can run for several rounds is a bigger commitment than one that replies once.
+The `edges` line is exactly the same as we have used in the sequential workflow example in Lesson 16. `draft_notification` just happens to be an `Agent`. `calculate_deductions` could be an annotated Python function (`@node`).
+
+**There is one thing to decide, though**: how the agent behaves as a node. `Agent` has a `mode` field with three values, `chat`, `single_turn`, and `task`. 
+
+- **`chat`**: is for multi-agent transfer scenarios, not something a graph node needs, so this lesson leaves it alone entirely.
+- **`single_turn`**: the _agent node_ receives its input, the model replies once, and that reply is the node's output. One exchange, done.
+- **`task`**: the _agent node_ can call tools across several rounds, deciding for itself how many rounds it needs, and only finishes when it explicitly says so.
+
+If you do not set `mode` at all in the `Agent`'s definition (as we have done here), it defaults to `single_turn`. You never have to ask for the simple case. `task` mode, on the other hand, always has to be requested explicitly, since a node that can run for several rounds is a bigger commitment than one that replies once.
 
 ## Part 2: single_turn mode
 
