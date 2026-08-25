@@ -40,7 +40,7 @@ There is a second way to get data into a graph, via context state: `ctx.state`. 
 
 You initialize the context state before calling the graph, just like we initiized context state before calling the Agent in lesson `6a`.
 
-**Getting a result out.** `InMemoryRunner.run_debug(...)` returns a list of events  `list[Event]` as it progresses through the various nodes. The _last event_ in that list carries the output of whichever node the graph finished on. `events[-1].output` is the result your graph computed. 
+**Getting a result out.** `InMemoryRunner.run_debug(...)` returns a list of events (`list[Event]`) as it progresses through the various nodes. The _last event_ in that list carries the output of whichever node the graph finished on. `events[-1].output` is the result your graph computed. 
 
 ## How a node reads its inputs
 
@@ -48,7 +48,7 @@ Every node function can declare up to three kinds of parameters, and the framewo
 
 - `ctx`, if you declare it, gives you the node's execution context. You use it to set `ctx.route` for conditional branching and to read/write variables to context.
 - `node_input`, if you declare it, gives you whatever the previous node returned, or the original input if this is the first node after `START`.
-- Any other named parameter you declare gets its value from `ctx.state`. Declare a parameter called `manual_review_limit`, and the framework looks for a key named `manual_review_limit` in `ctx.state` and passes its value in. You do not write any code linking the two, the name is the whole connection. You will see this directly below, in the node that decides whether a loan needs manual review.
+- Any other named parameter you declare gets its value from `ctx.state`. Declare a parameter called `manual_review_threshold`, and the framework looks for a key named `manual_review_threshold` in `ctx.state` and passes its value in. You do not write any code linking the two, the name is the whole connection. You will see this directly below, in the node that decides whether a loan needs manual review.
 
 A single node can use all three at once. You will see this directly in Part 4, in the node that decides whether a loan needs manual review.
 
@@ -60,14 +60,38 @@ Let's go step by step. We start with the simplest possible shape, a plain linear
 
 ### Stage 1: building a Sequential chain
 
-**What we are building.** A tiny loan disbursement calculation, two steps. The first step takes a loan amount, a fee percentage, and a GST rate, and works out how much gets deducted. The second step takes that and works out what the borrower actually receives. A borrower gets the net amount disbursed after deducting the fees & tax on fees.
+We'll build a tiny loan disbursement calculation. Usually when one applies for a loan of `X` (rupees or dollars), the bank does not disburse the full `X` amount. It retains a small fee `F` (and deducts taxes `T` due on `F`). So the amount you receive `A = X - (F + T)`.
 
-**The nodes.** Here are the two functions, each wrapped with `@node`. We have added `print()` functions to display the flow through the graph. It's not part of the node logic.
+We'll build this workflow as a simple two-step sequential chain: 
+
+* The _first step_ takes the loan amount you requested `X` the fee percentage and GST (tax) rate and computes the total value to be deducted (i.e. `F + T`).
+* The _second step_  takes that calculation and works out what the borrower actually receives (i.e. `A = X - (F + T)`)
+
+I know this is a bit contrived. You can always perform the entire calculation in 1 step, but breaking it apart like this helps us illustrate how we can build a 2 step sequence. So bear with me please.
+
+#### Create the code
+
+Create the following folder/directory structure for this example. Since we don't have any Agents yet, this structure is much simpler than what we are accustomed to.
+
+```
+adk2_tutorial/
+└── agents/
+    └── lesson16_workflow_basics/
+        └── stage1_linear.py
+```
+
+Create the `agents/lesson16_workflow_basics/stage1_linear.py` file and add the following code to the file.
+
+**Step1 - define the nodes:** Add these two functions to `stage1_linear.py` file. These are function nodes, wrapped in a familiar `@node` decorator. We have added extra `print()` calls to display flow through the graph - in a business workflow, these could be `log()` messages or completely omitted.
 
 ```python
+# Step1 : define the nodes of the graph
+
+import asyncio
 import json
 from google.adk.workflow import START, Workflow, node
 
+# Step 1: calculated the deductions
 @node
 async def calculate_deductions(ctx, node_input: str) -> dict:
     print("  [calculate_deductions] node running")
@@ -85,7 +109,7 @@ async def calculate_deductions(ctx, node_input: str) -> dict:
     print(f"        Returning: {resp}")
     return resp
 
-
+# Step 2: calculate net payout amount
 @node
 async def calculate_net_payout(ctx, node_input: dict) -> dict:
     print("  [calculate_net_payout] node running")
@@ -99,11 +123,15 @@ async def calculate_net_payout(ctx, node_input: dict) -> dict:
     return resp
 ```
 
-**The graph.** Two nodes are not a graph until something wires them together. That something is `Workflow`.
+**Step 2: build the workflow** Two nodes are not a graph until something wires them together. That something is `Workflow`. Add these lines to the `stage1_linear.py` file.
 
 ```python
+# Step 2: build the workflow 
 sequential_flow = Workflow(
+    # give any unique name of your choice
     name="sequential_flow",
+    # this is how you define the sequential workflow
+    # any workflow ALWAYS begins with START
     edges=[(START, calculate_deductions, calculate_net_payout)],
 )
 ```
@@ -112,36 +140,35 @@ sequential_flow = Workflow(
 
 Look closely at that `edges` list. `(START, calculate_deductions, calculate_net_payout)` is a chain, read left to right: start here, then this node, then that node. `Workflow` turns that tuple into two edges for you, `START -> calculate_deductions` and `calculate_deductions -> calculate_net_payout`. You never had to construct an `Edge` object by hand.
 
-**Running it.** To actually execute a graph, wrap it in a `Runner` and call it. `InMemoryRunner.run_debug(...)` is the fastest way to do that while you are still building. **It is a convenience helper ADK ships specifically for quick experimentation**, not something you write yourself. It handles session creation and event streaming for you, so you can call a workflow with one line and look straight at the result. That convenience comes with a real limitation worth stating plainly: `run_debug` only accepts a string, or a list of strings, as input, nothing else! 
+**Step3 - run the workflow:** To actually execute a graph, wrap the `Workflow` object in a `Runner` and call it. ADK supplies a convenience function - `InMemoryRunner.run_debug(...)` - to do exactly that.
 
-`run_debug` is also **not how you would run a workflow in a live production system**, it is a debugging and experimentation tool, meant for exactly the kind of learning we are doing right now. Later lessons in this arc cover the production path properly. For now, it is exactly the right tool for learning how a graph behaves.
+> 📌 **NOTE:** `run_debug()` is a convenience function to test workflows, much like `adk web` and `adk run` we have used so far to test our agents. It _should NOT be used in Production_. It handles session creation and event streaming for you.  
 
+Add the following lines to our `stage1_linear.py` file. We are departing slightly from our usual coding convention of using a separate `main.py` file. Since these first-few workflows are very simple workflows, we've added the `main()` function to the same Python file that defines the workflow.
 
 ```python
-runner = InMemoryRunner(agent=sequential_flow)
-events = await runner.run_debug(
-    '{"loan_amount": 50000, "fee_percentage": 2.0, "gst_rate": 18.0}',
-    quiet=True,
-)
-print("Final result:", events[-1].output)
+# Step3: run the workflow
+from google.adk.runners import InMemoryRunner
+
+async def main() -> None:
+    runner = InMemoryRunner(agent=sequential_flow)
+    events = await runner.run_debug(
+        # our JSON string that forms the input to our Workflow
+        '{"loan_amount": 50000, "fee_percentage": 2.0, "gst_rate": 18.0}',
+        # suppress verbose logs
+        quiet=True,
+    )
+    print("Final result:", events[-1].output)
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
-`run_debug` returns a `list[Event]`. The last event in that list carries the output of whichever node the graph finished on. `events[-1].output` is your practical result, the actual thing your graph computed. Always capture it and print it. Never let a graph's return value disappear silently.
+`run_debug` returns a `list[Event]`. The last event in that list carries the output of whichever node the graph finished on. `events[-1].output` is your practical result, the actual thing your graph computed.
 
-One argument worth calling out: `quiet=True`. Left at its default of `False`, `run_debug` logs its own play-by-play to the console, session creation, every event as it streams by. `quiet=True` switches that off, so the only output you see is what your own `print` statements produce. Every example in this lesson sets it, to keep the output easy to read against the code.
+We have used `quiet=True` to suppress internal log messages from the ADK. If we omit this, it defaults to `quiet=False`, which logs every detail to console - every session, every event it streams - the works! That makes finding our outputs very difficult. We'll continue to use `quiet=True` to suppress all ADK messages, so we can clearly see our print statements.
 
-## Run the code
-
-Save the node functions, the `sequential_flow` definition, and a small `main()` wrapping the run above into a single file, laid out the same way every lesson in this series is laid out:
-
-Create the following directory structure for this example. Since we don't have any Agents yet, this structure is much simpler than what er are accustomed to. Right now `stage1_linear.py` is just a script you run directly, nothing imports it.
-
-```
-adk2_tutorial/
-└── agents/
-    └── lesson16_workflow_basics/
-        └── stage1_linear.py
-```
+#### Run the code
 
 Run the following commands in a new terminal from the project root folder (`adk2_tutorial`):
 
@@ -152,7 +179,7 @@ source .venv/bin/activate
 uv run agents/lesson16_workflow_basics/stage1_linear.py
 ```
 
-You will see this:
+You will see this output in your terminal:
 
 ```
   [calculate_deductions] node running
@@ -164,28 +191,113 @@ You will see this:
 Final result: {'net_disbursement': 48820.0, 'status': 'READY_FOR_TRANSFER'}
 ```
 
-Read that output against the graph you just built. `calculate_deductions` runs first and prints, because it is the node connected to `START`. `calculate_net_payout` runs second and prints, because the edge you declared points there next. Base fee comes to 1000, tax on that fee comes to 180, total deductions 1180, net payout 48820. Two nodes, one straight line, correct math, and the print order proves the edges ran in the order you wrote them.
+Read that output against the graph you just built: 
 
-That is the complete linear chain.
+* `calculate_deductions` runs first because it is the node connected to `START`. It calculates the total deductions (base fee = 2% of 50,000 = 1,000 and 18% GST on 1,000 is 180, so total deductions = 1000+180 = 1180), prints our messages, and forwards to next node. 
+* `calculate_net_payout` runs second, because thats the next node in the sequence.the edge you declared points there next. It calculates net disbursement (50,000 - 1180 = 48,820), prints our message and returns the final result from graph (as this is the final node in the graph).
+
+Two nodes, one straight line, and the print functions we added proves that these nodes run in the right sequence (and also validates the calculations!).
+
+That is the complete linear chain for you - you can have as many "streps" running one after another in the sequential chain. We had just two our case, which I admit is a bit contrived for this simple calculation.
 
 ### Stage 2: adding a conditional branch
 
-**What we are building.** A real disbursement process does not stop at "ready for transfer." Above a certain amount, it needs a human to sign off before the money moves. Below that amount, it clears automatically. A straight line cannot express that choice, so we add a third node that decides, and two branches after it, converging back into one final node.
+A real disbursement process does not stop at "ready for transfer. If the disbursal amount is above a certain pre-defined threshold, it needs a human to sign off before the money moves. Disbursals below the threshold clear automatically.
 
-**The nodes.** Four new pieces: the node that makes the decision, one node per branch, and a node both branches land on afterward.
+That `if-else` logic cannot be expesses by a stright sequential flow - it requires a _conditional branch_. The sequential flow will calculate the disbursal amount and _land_ at the _conditional node_, which then decides if flow goes to the _auto clear_ edge or the _needs review_ edge depending on how the disbursal amount compares to the threshold.
+
+A _conditional node_ can have any number of edges going out from it. It depends on how _convoluted_ your logic is 😊. If your logic has 10 `if-else` branches, then there will be 10 edges coming out from the _conditional node_.
+
+The _conditional node_ is just another annotated (with `@node` decorator) function. That functions **must have** the `ctx` parameter and any more parameters you decide. We set the `ctx.route` attribute to the value of the _edge_ we want our graph to take depending on our business logic.
+
+Here is a quick example of _routing logic_:
 
 ```python
+# ctx.route is a string value you define
+# this string value "names" a branch
+if net_disbursement > manual_review_threshold:
+    ctx.route = "needs_review"
+else:
+    ctx.route = "auto_clear"
+```
+
+**The nodes.** We define 4 new nodes - all annotated functions (with the `@node` annotation as before):
+
+* a `check_compliance_threshold` node, which is our _conditional node_, that branches out to 2 nodes depending on the value of the disbursal amount viz-a-viz the threshold.
+* a `flag_for_review` node, which _handles_ the review logic. In an actual business workflow, this would execute appropriate review steps. In our case it's just a dummy function that logs a message, sets the status as "pending review" and forwards to next node.
+* a `auto_disburse` node, which _handles_ the auto-approval. In an actual business workflow, this function would execute the actual auto-approve steps. In our case, it's another dummy function that logs a message, sets status to "auto approve" and forwards to next node.
+* a `log_decision`, which is the node to which both the above branches forwards to. It's another dummy node in our case that logs a message. It is also the last node in our workflow.
+
+#### Create the code
+
+Create the following folder/directory structure for this example. For this example, we are just adding a new Python file `stage2_branch.py` in the same folder as the example above. We will be _appending_ a branching workflow to the end of the _sequential worflow_ from our previous example.
+
+```
+adk2_tutorial/
+└── agents/
+    └── lesson16_workflow_basics/
+        ├── stage1_linear.py
+        └── stage2_branch.py
+```
+
+Create the `agents/lesson16_workflow_basics/stage2_branch.py` file and add the following code to the file.
+
+**Step1 - define the nodes:** Add the 2 nodes from the `stage1_linear.py` file + 4 new nodes for the branching logic:
+
+```python
+# Step1 : define the nodes of the graph
+import asyncio
+import json
+from google.adk.workflow import START, Workflow, node
+
+
+# ------------------------------------------------------
+# 2 old nodes for the sequential logic
+# ------------------------------------------------------
+@node
+async def calculate_deductions(ctx, node_input: str) -> dict:
+    print("  [calculate_deductions] node running")
+    print(f"      Got input: {node_input}")
+    params = json.loads(node_input)
+    loan_amount = params["loan_amount"]
+    fee_percentage = params["fee_percentage"]
+    gst_rate = params["gst_rate"]
+
+    base_fee = loan_amount * (fee_percentage / 100)
+    tax = base_fee * (gst_rate / 100)
+    total_deductions = base_fee + tax
+
+    resp = {"loan_amount": loan_amount, "total_deductions": total_deductions}
+    print(f"        Returning: {resp}")
+    return resp
+
+@node
+async def calculate_net_payout(ctx, node_input: dict) -> dict:
+    print("  [calculate_net_payout] node running")
+    print(f"      Got input: {node_input}")
+    loan_amount = node_input["loan_amount"]
+    total_deductions = node_input["total_deductions"]
+    net_disbursement = loan_amount - total_deductions
+
+    resp = {"net_disbursement": net_disbursement, "status": "READY_FOR_TRANSFER"}
+    print(f"        Returning: {resp}")
+    return resp
+
+# ------------------------------------------------------
+# 4 new nodes for the branching logic
+# ------------------------------------------------------
+
 @node
 async def check_compliance_threshold(
-    ctx, node_input: dict, manual_review_limit: float
+    ctx, node_input: dict, manual_review_threshold: float
 ) -> dict:
     print("  [check_compliance_threshold] node running")
     net_disbursement = node_input["net_disbursement"]
     print(
-        f"      Got input: {node_input} - manual_review_limit: {manual_review_limit} - net_disbursement: {net_disbursement}"
+        f"      Got input: {node_input} - manual_review_threshold: {manual_review_threshold} - net_disbursement: {net_disbursement}"
     )
 
-    if net_disbursement > manual_review_limit:
+    if net_disbursement > manual_review_threshold:
         print("      Net disbursement > manual review limit, routing to 'needs_review'")
         ctx.route = "needs_review"
     else:
@@ -213,21 +325,28 @@ async def log_decision(node_input: dict) -> dict:
     return node_input
 ```
 
-`check_compliance_threshold` uses all three parameter binding rules from Part 3 in one function. `ctx` and `node_input` are the reserved names. `manual_review_limit` is not reserved, so the framework looks for a key of that exact name in `ctx.state`, finds it, and hands it to the function. You never pass that value explicitly. The name is the entire connection. As before, we have added a lot of `print` statements just to show progress through the workflow.
+`check_compliance_threshold` uses all three parameter binding rules from Part 3 in one function. `ctx` and `node_input` are the reserved names. `manual_review_threshold` is not reserved, so the framework looks for a key of that exact name in `ctx.state`, finds it, and hands it to the function. You never pass that value explicitly. The name is the entire connection. As before, we have added a lot of `print` statements just to show progress through the workflow.
 
 Setting `ctx.route` is how this node makes its decision visible to the graph. It does not call `flag_for_review` or `auto_disburse` directly. It just states which route it is taking, and the graph looks at that value to decide where to go next.
 
-**The graph.** Now the edges that wire all six nodes together, the two from Stage 1 plus these four:
+**Step2 - define the workflow** This is how we wire all the nodes into our workflow. Add this code to `stage2_branch.py` file.
 
 ```python
 loan_disbursement_workflow = Workflow(
+    # any name of your choice (must follow Python variable naming convention)
     name="loan_disbursement_workflow",
+    # wire the edges together
     edges=[
+        # the sequential part, ending in our conditional node
         (START, calculate_deductions, calculate_net_payout, check_compliance_threshold),
+        # the branch logic from our conditional node to 2 edges
+        # here is where we use the values we assigned to ctx.route
+        # inside the check_compliance_threshold functions
         (check_compliance_threshold, {
             "needs_review": flag_for_review, 
             "auto_clear": auto_disburse
         }),
+        # finally, both branches terminate in the log_decision node
         (flag_for_review, log_decision),
         (auto_disburse, log_decision),
     ],
@@ -240,36 +359,53 @@ This is how the workflow looks:
 
 The second line is new syntax: a dictionary in place of a plain node. `{"needs_review": flag_for_review, "auto_clear": auto_disburse}` is a routing map. It tells `Workflow` to build two conditional edges off `check_compliance_threshold`, one that only fires when `ctx.route == "needs_review"`, one that only fires when `ctx.route == "auto_clear"`. Whichever branch runs, both `flag_for_review` and `auto_disburse` lead into the same `log_decision` node, so the graph converges back to a single point no matter which path it took.
 
-**Running it.** This graph needs `manual_review_limit` in `ctx.state` before it runs, and nothing in the graph itself sets that value, so it has to be seeded on the session ahead of time. This is also exactly where `run_debug`'s string-only limitation from Stage 1 becomes real, we cannot hand it a dict of state directly, so we seed state on the session first, then call `run_debug` against that same session:
+**Step3: run the workflow** This graph needs `manual_review_threshold` in `ctx.state` before it runs, and nothing in the graph itself sets that value, so it has to be seeded on the session ahead of time. You should be familiar with the code that initializes session variables, back from Lesson 6.
 
 ```python
-await runner.session_service.create_session(
-    app_name=runner.app_name,
-    user_id="lesson16_user",
-    session_id="run_1",
-    state={"manual_review_limit": 1_000_000},
-)
+# Step3: run the workflow
+from google.adk.runners import InMemoryRunner
 
-payload = json.dumps(
-    {"loan_amount": loan_amount, "fee_percentage": 2.0, "gst_rate": 18.0}
-)
+# helper function to run workflow, given loan amount - fees + GST rate is same!
+async def run_loan(runner: InMemoryRunner, session_id: str, loan_amount: float) -> None:
+    # first create a session because we need to seed the context with
+    # manual review limit for the compliance check node
+    await runner.session_service.create_session(
+        app_name=runner.app_name,
+        user_id="lesson16_user",
+        session_id=session_id,
+        state={"manual_review_threshold": 1_000_000},
+    )
 
-events = await runner.run_debug(
-    payload, quiet=True, session_id="run_1", user_id="lesson16_user",
-)
+    payload = json.dumps(
+        {"loan_amount": loan_amount, "fee_percentage": 2.0, "gst_rate": 18.0}
+    )
+    
+    events = await runner.run_debug(
+        payload,
+        quiet=True,
+        session_id=session_id,
+        user_id="lesson16_user",
+    )
+    print(f"Final result for loan_amount={loan_amount}:", events[-1].output)
+
+
+async def main() -> None:
+    runner = InMemoryRunner(agent=loan_disbursement_workflow)
+
+    print("Run 1: a loan that clears automatically")
+    await run_loan(runner, session_id="run_1", loan_amount=50_000)
+
+    print("\nRun 2: a loan that trips manual review")
+    await run_loan(runner, session_id="run_2", loan_amount=5_000_000)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
-Get the `user_id` and `session_id` right on both calls. If they do not match exactly between `create_session` and `run_debug`, you are not talking to the session you just seeded, you are talking to a brand new empty one, and `manual_review_limit` will not be there when the graph looks for it.
+Get the `user_id` and `session_id` right on both calls. If they do not match exactly between `create_session` and `run_debug`, you are not talking to the session you just seeded, you are talking to a brand new empty one, and `manual_review_threshold` will not be there when the graph looks for it.
 
-**Running it from the command line.** Save everything, the six node functions, `loan_disbursement_workflow`, and a `main()` that runs two loans through it, into the same lesson folder, alongside the file from Stage 1:
-
-```
-adk2_tutorial/
-└── agents/
-    └── lesson16_workflow_basics/
-        ├── stage1_linear.py
-        └── stage2_branch.py
-```
+#### Run the code
 
 Run the following commands in a new terminal from the project root folder (`adk2_tutorial`):
 
@@ -291,7 +427,7 @@ Run 1: a loan that clears automatically
       Got input: {'loan_amount': 50000, 'total_deductions': 1180.0}
         Returning: {'net_disbursement': 48820.0, 'status': 'READY_FOR_TRANSFER'}
   [check_compliance_threshold] node running
-      Got input: {'net_disbursement': 48820.0, 'status': 'READY_FOR_TRANSFER'} - manual_review_limit: 1000000.0 - net_disbursement: 48820.0
+      Got input: {'net_disbursement': 48820.0, 'status': 'READY_FOR_TRANSFER'} - manual_review_threshold: 1000000.0 - net_disbursement: 48820.0
       Net disbursement <= manual review limit, routing to 'auto_clear'
         Returning: {'net_disbursement': 48820.0, 'status': 'READY_FOR_TRANSFER'}
   [auto_disburse] node running
@@ -306,7 +442,7 @@ Run 2: a loan that trips manual review
       Got input: {'loan_amount': 5000000, 'total_deductions': 118000.0}
         Returning: {'net_disbursement': 4882000.0, 'status': 'READY_FOR_TRANSFER'}
   [check_compliance_threshold] node running
-      Got input: {'net_disbursement': 4882000.0, 'status': 'READY_FOR_TRANSFER'} - manual_review_limit: 1000000.0 - net_disbursement: 4882000.0
+      Got input: {'net_disbursement': 4882000.0, 'status': 'READY_FOR_TRANSFER'} - manual_review_threshold: 1000000.0 - net_disbursement: 4882000.0
       Net disbursement > manual review limit, routing to 'needs_review'
         Returning: {'net_disbursement': 4882000.0, 'status': 'READY_FOR_TRANSFER'}
   [flag_for_review] node running
@@ -317,6 +453,11 @@ Final result for loan_amount=5000000: {'net_disbursement': 4882000.0, 'status': 
 Watch which node prints in each run. In Run 1, `auto_disburse` fires and `flag_for_review` never does. In Run 2, it is the other way round. Same graph, same code, `check_compliance_threshold` genuinely decided which path ran, and `log_decision` prints in both runs regardless, because that is where the two branches converge. Loan amount 50,000 lands `net_disbursement` at 48,820, well under the 1,000,000 limit, so it routes to `auto_clear`. Loan amount 5,000,000 lands `net_disbursement` at 4,882,000, over the limit, so it routes to `needs_review`.
 
 That is the complete conditional branch.
+
+I must admit, these examples are a bit contrived, but simple enough to illustrate how workflows ate built in ADK 2.0. Here are some real examples of BFSI workflows that can be modeled as sequential + conditional workflows:
+
+1. **Commercial Loan Underwriting**: Financial Extraction -> Ratio & Debt Service Calculations -> Covenant Compliance & Risk Analysis -> LOS Dispatch & Store.
+2. **Auto Insurance First Notice of Loss (FNOL) Adjudication**: Loss Intake & Severity Triage -> Coverage & Deductible Engine -> Damage Consistency & Fraud Analysis -> Settlement Router / Adjuster Task Creator
 
 ## What's next
 

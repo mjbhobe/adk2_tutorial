@@ -46,15 +46,15 @@ async def calculate_net_payout(ctx, node_input: dict) -> dict:
 
 @node
 async def check_compliance_threshold(
-    ctx, node_input: dict, manual_review_limit: float
+    ctx, node_input: dict, manual_review_threshold: float
 ) -> dict:
     print("  [check_compliance_threshold] node running")
     net_disbursement = node_input["net_disbursement"]
     print(
-        f"      Got input: {node_input} - manual_review_limit: {manual_review_limit} - net_disbursement: {net_disbursement}"
+        f"      Got input: {node_input} - manual_review_threshold: {manual_review_threshold} - net_disbursement: {net_disbursement}"
     )
 
-    if net_disbursement > manual_review_limit:
+    if net_disbursement > manual_review_threshold:
         print("      Net disbursement > manual review limit, routing to 'needs_review'")
         ctx.route = "needs_review"
     else:
@@ -106,7 +106,7 @@ async def run_loan(runner: InMemoryRunner, session_id: str, loan_amount: float) 
         app_name=runner.app_name,
         user_id="lesson16_user",
         session_id=session_id,
-        state={"manual_review_limit": 1_000_000},
+        state={"manual_review_threshold": 1_000_000},
     )
     payload = json.dumps(
         {"loan_amount": loan_amount, "fee_percentage": 2.0, "gst_rate": 18.0}
