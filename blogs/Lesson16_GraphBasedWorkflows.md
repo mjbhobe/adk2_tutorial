@@ -177,12 +177,18 @@ async def check_compliance_threshold(
 ) -> dict:
     print("  [check_compliance_threshold] node running")
     net_disbursement = node_input["net_disbursement"]
+    print(
+        f"      Got input: {node_input} - manual_review_limit: {manual_review_limit} - net_disbursement: {net_disbursement}"
+    )
 
     if net_disbursement > manual_review_limit:
+        print("      Net disbursement > manual review limit, routing to 'needs_review'")
         ctx.route = "needs_review"
     else:
+        print("      Net disbursement <= manual review limit, routing to 'auto_clear'")
         ctx.route = "auto_clear"
 
+    print(f"        Returning: {node_input}")
     return node_input
 
 @node
@@ -203,7 +209,7 @@ async def log_decision(node_input: dict) -> dict:
     return node_input
 ```
 
-`check_compliance_threshold` uses all three parameter binding rules from Part 3 in one function. `ctx` and `node_input` are the reserved names. `manual_review_limit` is not reserved, so the framework looks for a key of that exact name in `ctx.state`, finds it, and hands it to the function. You never pass that value explicitly. The name is the entire connection.
+`check_compliance_threshold` uses all three parameter binding rules from Part 3 in one function. `ctx` and `node_input` are the reserved names. `manual_review_limit` is not reserved, so the framework looks for a key of that exact name in `ctx.state`, finds it, and hands it to the function. You never pass that value explicitly. The name is the entire connection. As before, we have added a lot of `print` statements just to show progress through the workflow.
 
 Setting `ctx.route` is how this node makes its decision visible to the graph. It does not call `flag_for_review` or `auto_disburse` directly. It just states which route it is taking, and the graph looks at that value to decide where to go next.
 
@@ -214,12 +220,19 @@ loan_disbursement_workflow = Workflow(
     name="loan_disbursement_workflow",
     edges=[
         (START, calculate_deductions, calculate_net_payout, check_compliance_threshold),
-        (check_compliance_threshold, {"needs_review": flag_for_review, "auto_clear": auto_disburse}),
+        (check_compliance_threshold, {
+            "needs_review": flag_for_review, 
+            "auto_clear": auto_disburse
+        }),
         (flag_for_review, log_decision),
         (auto_disburse, log_decision),
     ],
 )
 ```
+
+This is how the workflow looks:
+
+![Sequential and Conditional Workflow](images/sequential_and_conditional_chain.png)
 
 The second line is new syntax: a dictionary in place of a plain node. `{"needs_review": flag_for_review, "auto_clear": auto_disburse}` is a routing map. It tells `Workflow` to build two conditional edges off `check_compliance_threshold`, one that only fires when `ctx.route == "needs_review"`, one that only fires when `ctx.route == "auto_clear"`. Whichever branch runs, both `flag_for_review` and `auto_disburse` lead into the same `log_decision` node, so the graph converges back to a single point no matter which path it took.
 
@@ -231,6 +244,10 @@ await runner.session_service.create_session(
     user_id="lesson16_user",
     session_id="run_1",
     state={"manual_review_limit": 1_000_000},
+)
+
+payload = json.dumps(
+    {"loan_amount": loan_amount, "fee_percentage": 2.0, "gst_rate": 18.0}
 )
 
 events = await runner.run_debug(
@@ -250,9 +267,12 @@ adk2_tutorial/
         └── stage2_branch.py
 ```
 
-From the project root:
+Run the following commands in a new terminal from the project root folder (`adk2_tutorial`):
 
-```
+```bash
+# activate your local environment
+source .venv/bin/activate
+# run the python script
 uv run agents/lesson16_workflow_basics/stage2_branch.py
 ```
 
@@ -261,16 +281,30 @@ You will see this:
 ```
 Run 1: a loan that clears automatically
   [calculate_deductions] node running
+      Got input: {"loan_amount": 50000, "fee_percentage": 2.0, "gst_rate": 18.0}
+        Returning: {'loan_amount': 50000, 'total_deductions': 1180.0}
   [calculate_net_payout] node running
+      Got input: {'loan_amount': 50000, 'total_deductions': 1180.0}
+        Returning: {'net_disbursement': 48820.0, 'status': 'READY_FOR_TRANSFER'}
   [check_compliance_threshold] node running
+      Got input: {'net_disbursement': 48820.0, 'status': 'READY_FOR_TRANSFER'} - manual_review_limit: 1000000.0 - net_disbursement: 48820.0
+      Net disbursement <= manual review limit, routing to 'auto_clear'
+        Returning: {'net_disbursement': 48820.0, 'status': 'READY_FOR_TRANSFER'}
   [auto_disburse] node running
   [log_decision] node running
 Final result for loan_amount=50000: {'net_disbursement': 48820.0, 'status': 'AUTO_DISBURSED'}
 
 Run 2: a loan that trips manual review
   [calculate_deductions] node running
+      Got input: {"loan_amount": 5000000, "fee_percentage": 2.0, "gst_rate": 18.0}
+        Returning: {'loan_amount': 5000000, 'total_deductions': 118000.0}
   [calculate_net_payout] node running
+      Got input: {'loan_amount': 5000000, 'total_deductions': 118000.0}
+        Returning: {'net_disbursement': 4882000.0, 'status': 'READY_FOR_TRANSFER'}
   [check_compliance_threshold] node running
+      Got input: {'net_disbursement': 4882000.0, 'status': 'READY_FOR_TRANSFER'} - manual_review_limit: 1000000.0 - net_disbursement: 4882000.0
+      Net disbursement > manual review limit, routing to 'needs_review'
+        Returning: {'net_disbursement': 4882000.0, 'status': 'READY_FOR_TRANSFER'}
   [flag_for_review] node running
   [log_decision] node running
 Final result for loan_amount=5000000: {'net_disbursement': 4882000.0, 'status': 'PENDING_MANUAL_REVIEW'}
@@ -280,39 +314,8 @@ Watch which node prints in each run. In Run 1, `auto_disburse` fires and `flag_f
 
 That is the complete conditional branch.
 
-## Part 5: Running the full lesson
-
-The complete, runnable version of this graph lives alongside the two stage files you just ran, laid out the same way every lesson in this series is laid out:
-
-```
-adk2_tutorial/
-└── agents/
-    └── lesson16_workflow_basics/
-        ├── __init__.py
-        ├── stage1_linear.py
-        ├── stage2_branch.py
-        ├── agent.py
-        └── main.py
-```
-
-`agent.py` defines the graph, the same six nodes and edges from Stage 2, and exposes it as `root_agent`. `main.py` is the driver that runs it. Two ADK-specific details here are worth calling out by name, since they are new even though the rest of the code is not.
-
-First, `root_agent`. `adk web agents`, the tool you have used to inspect agents visually since Lesson 1, only discovers an agent if it finds a variable named exactly `root_agent` inside a proper Python subpackage, one with its own `__init__.py`. A `Workflow` satisfies that contract the same way an `LlmAgent` does, since both are, underneath, a `BaseNode`. That is why `agent.py` ends with a plain assignment, `root_agent = loan_disbursement_workflow`, nothing more elaborate is needed.
-
-Second, `common/runner_utils.py`'s `run_agent_query`. `main.py` deliberately does not use it. That helper reads an LLM's text reply out of the event stream, and this graph has no LLM node in it, only function nodes. A function node never produces the kind of text content that helper looks for, so calling it here would print "(no response received)" even though the graph ran correctly and returned real data. `InMemoryRunner.run_debug` plus `events[-1].output`, exactly as shown in Stage 1 and Stage 2, is the right tool when a graph is pure functions. `run_agent_query` comes back into normal use starting Lesson 16a, once an `LlmAgent` node is in the picture.
-
-Run it from the project root:
-
-```
-uv run agents/lesson16_workflow_basics/main.py
-```
-
-You should see both runs print their intermediate steps, then their final decisions, `AUTO_DISBURSED` for the smaller loan, `PENDING_MANUAL_REVIEW` for the larger one.
-
-The same folder also works with `adk web agents` from the project root, for the discovery reason explained above.
-
 ## What's next
 
-This lesson covered two shapes: a sequential chain and a conditional branch. Those are the two most basic shapes a graph can take, but not the only ones. `Workflow` also supports fanning work out across several nodes at once and joining the results back together, feedback loops where a node can send work backward for another pass, hierarchical graphs where one workflow orchestrates others, and human-in-the-loop patterns where a graph pauses mid-run and waits for a person before continuing. Later lessons in this arc build each of those properly, with the same care we just put into a chain and a branch.
+This lesson covered two shapes: a sequential chain and a conditional branch. Those are the two most basic shapes a graph can take, but not the only ones. `Workflow` also supports _fanning_ work out across several nodes at once and _joining_ the results back together, _feedback loops_ where a node can send work backward for another pass, _hierarchical graphs_ where one workflow orchestrates others, and _human-in-the-loop_ patterns where a graph pauses mid-run and waits for a person before continuing. Later lessons in this arc build each of those properly, with the same care we just put into a chain and a branch.
 
-Every node in this lesson has also been a plain function. That covers a lot of real work, but it is not the whole story. Lesson 16a brings a full `LlmAgent` into the graph as a node in its own right, reasoning over the data flowing past it rather than just computing on it deterministically. You will see the difference between running that agent for a single exchange versus letting it carry on a longer task, and how to pin down exactly what shape of data goes in and comes out of an LLM-backed node, the same way `input_schema` and `output_schema` already shape the function nodes you just built. The graph mechanics do not change. What changes is what a node is allowed to be.
+Every node in this lesson has also been a plain function. That covers a lot of real work, but it is not the whole story. Lesson 16a brings a full `Agent` into the graph as a node in its own right, reasoning over the data flowing past it rather than just computing on it deterministically. You will see the difference between running that agent for a single exchange versus letting it carry on a longer task, and how to pin down exactly what shape of data goes in and comes out of an LLM-backed node, the same way `input_schema` and `output_schema` already shape the function nodes you just built. The graph mechanics do not change. What changes is what a node is allowed to be.
