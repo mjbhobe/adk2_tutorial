@@ -8,35 +8,39 @@ There is a tempting alternative to all three, and it is worth naming so you can 
 
 This split matters even more in BFSI than most domains. A loan does not always follow the same five steps in the same order. A transaction either looks fine and clears, or it looks odd and gets flagged, and those two paths do different things before they ever meet again. An AML investigation might need to loop back and re-check a customer's history after a new piece of evidence comes in. None of this fits neatly into "always run A then B then C," and none of it should be left to an LLM to improvise silently, not when the outcome is a real financial decision that needs to hold up to an auditor later. A graph gives you branching and convergence without giving up the paper trail.
 
-`Workflow` is ADK 2.x's flagship new feature for exactly this reason. It is a true graph-based orchestrator, you describe a set of nodes and how they connect, some connections plain, some conditional, and the graph figures out at runtime which path to take, while every step it takes stays traceable back to an edge you wrote. This is a big enough idea that it gets its own arc in this series, Lesson 16 through 16l, ending in a full AML investigation build. Everything in that arc rests on the vocabulary and mechanics in this lesson, so take your time here. Get this right, and the rest of the arc reads like natural extensions of something you already understand.
+`Workflow` is ADK 2.x's flagship new feature for exactly this reason. It is a true graph-based orchestrator, you describe a set of nodes and how they connect, some connections plain, some conditional, and the graph figures out at runtime which path to take, while every step it takes stays traceable back to an edge you wrote. If you have used LangGraph before, a lot of this will feel familiar, nodes, edges, state. If you have not, do not worry, these lessons don't assume you know LangGraph. We build everything from first principles.
 
 ![ADK 2 Workflows](images/ADK_Workflows.png)
 
-One more thing before we start. If you have used LangGraph before, a lot of this will feel familiar, nodes, edges, state. If you have not, do not worry, nothing here assumes it. We build everything from first principles.
-
 ## The Graph Workflows Vocabulary
 
-Four terms carry this whole lesson. Get comfortable with them now, because every later lesson in this arc assumes you already have them.
+When it comes to graphs, there are four team you should be intimately familiar with. So spend enough time to understand these cold.
 
-**Node.** A node is one unit of work in the graph. Most of the nodes you will write are plain Python functions, wrapped with the `@node` decorator. A node can also wrap other things, an `Agent`, a tool, even another `Workflow`, but for this lesson, every node is a function. A node takes some input, does something with it, and returns a result. That is the whole contract.
+**Node.** A node is one unit of work in the graph. Technically speaking, a node can be anything that inherits a `BaseNode` class. In most cases, you'll use plain Python functions annotated with `@node` as your graph nodes. Incidentally, annotating with `@node` makes a plain Python function behave like a `BaseNode`. 
 
-**Edge.** An edge is a connection from one node to another. The _simplest edge_ just means "when this node finishes, run that node next." A _conditional edge_ means "when this node finishes, look at which route it chose, and run whichever node matches that route." Edges are what turn a pile of nodes into an actual graph.
+However, a node can also wrap other things, such as an `Agent`, a tool, or even another `Workflow`! These don't require the `@node` decorator as they already inherit from `BaseNode` class. 
+
+A node takes some input, does something with it, and returns a result, which is passed down to the next node in the workflow or back to the user as the result.
+
+**Edge.** An edge is a connection from one node to another. The _simplest edge_ just means "when this node finishes, run that node next." A _conditional edge_ means "when this node finishes, look at which route it chose, and run whichever node matches that route." Edges are what turn a pile of nodes into an actual graph. Values returned from a node flow down the edges to the next node in sequence.
 
 **Graph.** The graph is the full map, every node and every edge, considered together. You do not usually build a `Graph` object directly. You hand `Workflow` a list of edges, and it builds the graph for you.
 
 **Workflow.** `Workflow` is the object that actually runs the graph. You give it a name and a list of edges. It works out the nodes from those edges automatically, validates that the graph makes sense, and knows how to execute it, start to finish, following whichever path the data takes.
 
-There is one more name you need before any of this can run: `START`. It is a fixed sentinel value, not something you create, that marks the entry point of the graph. Every graph in this lesson begins with an edge from `START` to whichever node should run first.
+There is one more name you need before any of this can run: `START`. It is a fixed sentinel value, not something you create, that marks the entry point of the graph. Every graph in this lesson begins with an edge from `START` to whichever node should run first. **Unlike LangGraph, there is no `END` special node that marks the end of the graph**.
 
 ## Getting data in and out of a graph
 
 A graph is not useful if you cannot feed it data and read back a result. Here is exactly how both directions work.
 
-**Getting data in.** When you run a `Workflow` through the normal `InMemoryRunner.run_debug(...)` helper, whatever you pass in becomes the `node_input` of the first node or nodes connected to `START`. In this lesson, that is a JSON string. It does not have to be a string forever, once the graph is running, node to node, data can be a dict, a list, a custom object, whatever the next node expects. The string-only restriction is a `run_debug` restriction because it accepts only a string, or a list of strings, as input. Once your data is inside the graph, that restriction disappears completely.
+**Getting data into the workflow:** When you run a `Workflow`, by using an ADK provided helper function `InMemoryRunner.run_debug(...)` for example, whatever you pass in becomes the `node_input` of the first node or nodes connected to `START`. `run_debug()` can accept only a string (or a list of strings) as input. That string can be a JSON string or any plain string that the first node(s) parse data out of. However, downstream nodes do not necessarily have to exchange data as strings. Nodes within the graph can exchange data as a JSON object, a Python dict, a custom object - whatever format the next node expects!
 
-There is a second way data gets into a graph: `ctx.state`. This is a dictionary that every node in the graph can read from and write to. Unlike `node_input`, which only flows from one node to the very next one, `ctx.state` is visible everywhere, for the whole run. You seed it once, before the graph starts, by setting state on the session the graph runs against. You will see exactly how in Part 4.
+There is a second way to get data into a graph, via context state: `ctx.state`. This is the same context we saw way back in Lesson 7. `ctx.state` is the state dictionary that every node in the graph sees and can read from and write to. Unlike `node_input`, which only flows from one node to the very next one, `ctx.state` is visible everywhere, for the whole run.
 
-**Getting a result out.** `InMemoryRunner.run_debug(...)` returns a `list[Event]`. The _last event_ in that list carries the output of whichever node the graph finished on. `events[-1].output` is your practical result, the actual thing your graph computed. Always capture it and print it. Never let a graph's return value disappear silently.
+You initialize the context state before calling the graph, just like we initiized context state before calling the Agent in lesson `6a`.
+
+**Getting a result out.** `InMemoryRunner.run_debug(...)` returns a list of events  `list[Event]` as it progresses through the various nodes. The _last event_ in that list carries the output of whichever node the graph finished on. `events[-1].output` is the result your graph computed. 
 
 ## How a node reads its inputs
 
