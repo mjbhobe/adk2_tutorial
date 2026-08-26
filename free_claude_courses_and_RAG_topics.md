@@ -1,3 +1,6 @@
+
+# Claude Courses
+
 Anthropic built a full Claude curriculum.
 
 They gave it away for free, with certificates.
@@ -19,10 +22,10 @@ They gave it away for free, with certificates.
 [https://lnkd.in/gNeJVefN](https://lnkd.in/gNeJVefN)
 
 4. Building with the Claude API, 8 hours 10 mins
-[https://lnkd.in/gGzZfCMN](https://lnkd.in/gGzZfCMN)
+[https://anthropic.skilljar.com/claude-with-the-anthropic-api](https://anthropic.skilljar.com/claude-with-the-anthropic-api)
 
 5. Claude Code in Action, 1 hour 50 mins
-[https://lnkd.in/gC7qFfW8](https://lnkd.in/gC7qFfW8)
+[https://anthropic.skilljar.com/claude-code-in-action](https://anthropic.skilljar.com/claude-code-in-action)
 
 6. Introduction to Model Context Protocol, 2 hours
 [https://lnkd.in/gYRktknw](https://lnkd.in/gYRktknw)
@@ -53,3 +56,22 @@ They gave it away for free, with certificates.
 
 13. Claude with Google Cloud Vertex
 [https://lnkd.in/ge5Qarui](https://lnkd.in/ge5Qarui)
+
+
+# RAG Topics
+
+  *  RAG architecture
+  *  Chunking strategies
+  *  Embeddings & retrieval
+  *  Vector search
+  *  Hybrid search
+  *  Metadata filtering
+  *  Top-K selection
+  *  Reranking
+  *  Query rewriting
+  *  Context construction
+  *  Hallucination & grounding
+  *  RAG evaluation
+  *  Production debugging
+  *  Latency & cost optimization
+  *  Scenario-based interview questions
