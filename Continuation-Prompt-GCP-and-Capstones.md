@@ -21,9 +21,15 @@ A standalone, general guide to deploying an ADK agent to Google Cloud. Not tied 
 - No long-running test jobs. Nothing that racks up cloud time or API spend just to prove it works.
 - State approximate costs before any step that spends real money, every time, not just once.
 
+**Assumed GCP knowledge, this matters a lot:**
+
+Example 1 must assume I know nothing about Google Cloud Platform. Not a fast overview, genuinely detailed, step by step. Creating a Google account or using an existing one, signing up for GCP, enabling billing, what a "project" actually is and how to create one, enabling the specific APIs a deployment needs, what Cloud Run actually is before using it, IAM permissions if any are required, all of it, in order, with real screenshots-equivalent detail in text form, exact menu paths or exact `gcloud` commands, not "go set up your project" as a throwaway line.
+
+Examples 2 through 4 can build on that foundation. Don't re-explain what a GCP project is every time, but do explain anything genuinely new each example introduces, a new service, a new permission, a new networking concept for the two-service A2A case in example 4.
+
 **The four examples, in order, simple to advanced, all reusing code already built and verified in this series, no new code written for this guide:**
 
-1. **Lesson 2**, the simplest possible single agent. The first deploy-and-teardown rehearsal.
+1. **Lesson 2**, the simplest possible single agent. The first deploy-and-teardown rehearsal, and the one that teaches GCP fundamentals from zero.
 2. **Lesson 11a**, a real `SequentialAgent` pipeline. Still one service, a genuine step up.
 3. **Lesson 9**, already has FastAPI and Streamlit built. The closest existing lesson to a real deployable web app's shape.
 4. **Lesson 15a**, the A2A pair. Two real services that need to reach each other over an actual network, not localhost. The hardest case, and deliberately the last one, since Phase 2's fourth capstone will reuse whatever gets worked out here.
