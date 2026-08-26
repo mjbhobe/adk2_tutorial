@@ -1,30 +1,36 @@
-"""Driver for Lesson 16a: LLM Nodes.
+"""
+Lesson 16a: driver for the loan disbursement workflow
 
-Runs the extended loan disbursement graph. Same structure as Lesson
-16's main.py: state seeded before each run, `InMemoryRunner.run_debug`
-plus `events[-1].output` for the result, `run_agent_query` still
-skipped for the same reason as Lesson 16, part of this graph is
-still pure function nodes, and even for the Agent node, `run_debug`
-already surfaces its output directly.
+Runs the extended loan disbursement graph for two loan amounts, one
+that clears automatically and one that trips manual review.
 
-This needs a real, working model configured in `common/model_config.py`
-to actually run. The loan numbers are deterministic. The notification
+Needs a real, working model configured in common/model_config.py to
+actually run. The loan numbers are deterministic. The notification
 text is not, it is genuine model output, so do not expect the exact
 wording shown in the lesson.
-"""
 
-from __future__ import annotations
+@author: Manish Bhobé
+My experiments with Python, Agentic AI and ADK.
+Code shared for learning purposes only! Use at your own risk.
+No warranties or guarantees of any kind.
+"""
 
 import asyncio
 import json
 
 from google.adk.runners import InMemoryRunner
 
-from agent import loan_disbursement_workflow
+from workflow import loan_disbursement_workflow
 
 
 async def run_loan(runner: InMemoryRunner, session_id: str, loan_amount: float) -> None:
-    """Seeds session state, runs the graph once, and prints the result."""
+    """Seeds session state, runs the graph once, and prints the result.
+
+    Args:
+        runner: The shared InMemoryRunner wrapping the workflow.
+        session_id: A unique session id for this run.
+        loan_amount: The loan principal to test with.
+    """
     await runner.session_service.create_session(
         app_name=runner.app_name,
         user_id="lesson16a_user",
