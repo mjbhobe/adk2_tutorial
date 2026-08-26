@@ -14,7 +14,7 @@ This lesson shows you how an `Agent` can be used as a node in a `Workflow`, wire
 
 An `Agent` can work as a node, because it's derived from `BaseNode`. Unlike a function, it **does not** require the `@node` decorator - a simple Python function needed the decorator to _convert_ it to a `BaseNode`. Adding an `Agent` to a workflow is no different than adding a function. Let's see how.
 
-Suppose we define a `draft_notification` agent like this in some `agent.py` file in our directory structure. You should be familiar with this code by now:
+Suppose we define a `draft_notification_agent` agent like this in some `agent.py` file in our directory structure. You should be familiar with this code by now:
 
 ```python
 # partial contents of agent.py file
@@ -28,9 +28,9 @@ INSTRUCTION = """
 .... agents instructions
 """
 
-draft_notification = Agent(
-    name="draft_notification",
-    description="Drafts a notfication email...",
+draft_notification_agent = Agent(
+    name="draft_notification_agent",
+    description="Drafts a structured....",
     model=get_model("primary"),
     instruction=INSTRUCTION,
     tools=[...],
@@ -42,15 +42,15 @@ And here's how we could define the workflow:
 
 ```python
 # in the file where we define the workflow
-from ... import draft_notification 
+from ... import draft_notification_agent 
 
 my_workflow = Workflow(
     name="my_workflow_name",
-    edges=[(START, calculate_deductions, draft_notification)],
+    edges=[(START, calculate_deductions, draft_notification_agent)],
 )
 ```
 
-The `edges` line is exactly the same as we have used in the sequential workflow example in Lesson 16. `draft_notification` just happens to be an `Agent`. `calculate_deductions` could be an annotated Python function (`@node`).
+The `edges` line is exactly the same as we have used in the sequential workflow example in Lesson 16. `draft_notification_agent` just happens to be an `Agent`. `calculate_deductions` could be an annotated Python function (`@node`).
 
 **There is one thing to decide, though**: how the agent behaves as a node. `Agent` has a `mode` field with three values, `chat`, `single_turn`, and `task`.
 
@@ -85,7 +85,6 @@ adk2_tutorial/
         │   ├── __init__.py
         │   └── agent.py
         ├── workflow.py
-        ├── __init__.py
         └── main.py
 ```
 
@@ -117,6 +116,16 @@ from google.adk.agents import Agent
 
 from common.model_config import get_model
 
+def _trigger_structured_output() -> str:
+    """Placeholder tool, never meant to be called.
+
+    See the explanation below the code listing for why this exists.
+
+    Returns:
+        A string that should never be seen.
+    """
+    return "not used"
+
 
 class NotificationMessage(BaseModel):
     """The structured shape draft_notification_agent must return.
@@ -130,7 +139,7 @@ class NotificationMessage(BaseModel):
     body: str
 
 
-_INSTRUCTION = """You are a loan operations assistant.
+INSTRUCTION = """You are a loan operations assistant.
 You will receive a JSON object describing a loan decision, with keys
 `net_disbursement` and `status`. `status` is either `AUTO_DISBURSED` or
 `PENDING_MANUAL_REVIEW`.
@@ -146,7 +155,9 @@ draft_notification_agent = Agent(
     name="draft_notification_agent",
     model=get_model("primary"),
     description="Drafts a structured customer notification for a loan decision.",
-    instruction=_INSTRUCTION,
+    instruction=INSTRUCTION,
+    # check callout below
+    tools=[_trigger_structured_output],
     output_schema=NotificationMessage,
 )
 # No mode= set here on purpose. A standalone Agent used directly as a
@@ -155,11 +166,17 @@ draft_notification_agent = Agent(
 
 `output_schema` is doing two jobs in this file. It shapes what the model is asked to produce, and it validates the node's output for the graph. One field, both jobs, by design.
 
-One thing worth being precise about: `node_input` for an `Agent` node is not validated against a schema the way `node_input` on a function node can be. Whatever you pass in becomes the literal message sent to the model, a dict gets turned into a JSON string, a string is used as is. `Agent` does have its own `input_schema` field, but its actual job is different, it shapes the schema for when this agent is used as a tool by another agent, not the shape of `node_input` here. That is why `_INSTRUCTION` above spells out the expected JSON shape in plain English, that is genuinely how the model finds out what it is looking at.
+> ✋✋ **Wait...what?** - what's this `_trigger_structured_output` tool for really? That's not a mistake - it's required, for real!
+>
+> That's due to another _quirk_ of the ADK. `output_schema` enforcement is a Gemini-native feature - just like `google_search` is. We are using a Claude model. `AnthropicLlm` **does not implement it at all**. A Claude model will always return plain text,not JSON, and `NotificationMessage` validation will fail! Comment out the `tools=[_trigger_structured_output]` and try.
+>
+> **But it worked back in Lesson 5! What happened now?** Yes, it did and that's where the "dummy" `_trigger_structured_output` tool comes in. For non-Gemini models, the ADK has a fallback mechanism to generate structured output. That mechanism gets activated _only if_ the `Agent` has at least 1 tool defined (😳 - IKR!). Back in Lesson 5, our Agent had a `calculate_debt_to_income_ratio` tool defined, so we didn't run into this problem. In this case, our Agent does not need a tool, but we define a dummy tool that does nothing and is not referenced in the `INSTRUCTION`. This is just to trigger the fallback mechanism and make a non-Gemini-model powered Agent generate structured output.
 
-Now the function nodes and the graph itself.
+One thing worth being precise about: `node_input` for an `Agent` node is not validated against a schema the way `node_input` on a function node can be. Whatever you pass in becomes the literal message sent to the model, a dict gets turned into a JSON string, a string is used as is. `Agent` does have its own `input_schema` field, but its actual job is different, it shapes the schema for when this agent is used as a tool by another agent, not the shape of `node_input` here. That is why `INSTRUCTION` above spells out the expected JSON shape in plain English, that is genuinely how the model finds out what it is looking at.
 
-`agents/lesson16a_llm_nodes/workflow.py`
+Next, let's build the nodes & the workflow:
+
+Create `agents/lesson16a_llm_nodes/workflow.py`
 
 ```python
 """
@@ -175,8 +192,13 @@ from typing import Any
 
 from google.adk.workflow import START, Workflow, node
 
+# our Agent node!
 from draft_notification.agent import draft_notification_agent
 
+# -----------------------------------------------------
+# These are node functions we have already seen in 
+# the previous lesson - no change here!
+# -----------------------------------------------------
 
 @node
 async def calculate_deductions(ctx: Any, node_input: str) -> dict:
@@ -297,6 +319,10 @@ async def log_decision(node_input: dict) -> dict:
     return node_input
 
 
+# -----------------------------------------------------
+# This is the new last-node in our graph/workflow
+# -----------------------------------------------------
+
 @node
 async def dispatch_notification(node_input: dict) -> dict:
     """Receives the drafted notification and finalizes the result.
@@ -310,8 +336,14 @@ async def dispatch_notification(node_input: dict) -> dict:
     """
     print(f"  [dispatch_notification] subject: {node_input['subject']}")
     print(f"  [dispatch_notification] body: {node_input['body']}")
+
+    # you would normally add code here to send the email
+    # to customer, which we are not doing 😊
     return node_input
 
+# -------------------------------------------------
+# the modified workflow
+# -------------------------------------------------
 
 loan_disbursement_workflow = Workflow(
     name="loan_disbursement_workflow",
@@ -320,6 +352,8 @@ loan_disbursement_workflow = Workflow(
         (check_compliance_threshold, {"needs_review": flag_for_review, "auto_clear": auto_disburse}),
         (flag_for_review, log_decision),
         (auto_disburse, log_decision),
+        # workflow ended at log_decision in previous lesson
+        # it now adds 2 nodes - our agent node & dispatch node
         (log_decision, draft_notification_agent, dispatch_notification),
     ],
 )
@@ -327,15 +361,11 @@ loan_disbursement_workflow = Workflow(
 root_agent = loan_disbursement_workflow
 ```
 
-`node_input` here for `dispatch_notification` is the dict `draft_notification_agent` returned, already validated against `NotificationMessage`. Nothing about this function is different from any function node in Lesson 16, an `Agent` node's validated output flows to the next node exactly like a function node's return value does.
+`node_input` here for `dispatch_notification` is the dict `draft_notification_agent` returned. Nothing about this function is different from any function node in Lesson 16, an `Agent` node's validated output flows to the next node exactly like a function node's return value does.
 
-The package marker for this lesson folder, needed for `adk web agents` discovery.
+Add the driver code for the modified workflow:
 
-`agents/lesson16a_llm_nodes/__init__.py` - **leave this blank!**
-
-And the driver.
-
-`agents/lesson16a_llm_nodes/main.py`
+Create `agents/lesson16a_llm_nodes/main.py`
 
 ```python
 """
@@ -352,6 +382,16 @@ wording shown in the lesson.
 
 import asyncio
 import json
+import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
+# pull in agents/commmon folder into system path, so Agent
+# can find the get_model() function
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from google.adk.runners import InMemoryRunner
 
@@ -381,6 +421,7 @@ async def run_loan(runner: InMemoryRunner, session_id: str, loan_amount: float) 
         payload, quiet=True, session_id=session_id, user_id="lesson16a_user"
     )
 
+    # the email JSON - subject & text of email.
     print(f"loan_amount={loan_amount} -> {events[-1].output}\n")
 
 
@@ -410,7 +451,49 @@ source .venv/bin/activate
 uv run agents/lesson16a_llm_nodes/main.py
 ```
 
-This needs a real, working model behind `get_model("primary")` in `common/model_config.py` to actually run. The loan numbers stay exactly as deterministic as Lesson 16, base fee 1000, tax 180, net payout 48820 for a 50,000 loan. The notification text will not be deterministic, it is genuine model output, so do not expect to see the exact wording shown anywhere in this lesson reproduced on your own run. `subject` and `body` will always be present, `output_schema` guarantees that much, it does not and should not guarantee the wording.
+You should see output like this:
+
+```
+$ uv run agents/lesson16a_llm_nodes/main.py
+Run 1: a loan that clears automatically
+  [calculate_deductions] base_fee=1000.0, tax=180.0, total_deductions=1180.0
+  [calculate_net_payout] {'net_disbursement': 48820.0, 'status': 'READY_FOR_TRANSFER'}
+  [check_compliance_threshold] net_disbursement=48820.0, manual_review_limit=1000000.0
+  [log_decision] final decision: {'net_disbursement': 48820.0, 'status': 'AUTO_DISBURSED'}
+C:\Users\BHOBEMRMANISHJAGDISH\Dev\code\git_projects\adk2_tutorial\.venv\Lib\site-packages\google\adk\tools\set_model_response_tool.py:134: UserWarning: [EXPERIMENTAL] feature FeatureName.JSON_SCHEMA_FOR_FUNC_DECL is enabled.
+  build_function_declaration(
+  [dispatch_notification] subject: Your Loan Has Been Approved and Funded
+  [dispatch_notification] body: Great news! Your loan application has been approved and we're sending your funds right away.
+
+You'll receive $48,820.00 in your account within 1-2 business days. This is the net amount after any applicable fees or adjustments.
+
+If you have any questions about your loan, please don't hesitate to reach out. Thank you for choosing us!
+
+======== Final Response ========
+loan_amount=50000 -> {'subject': 'Your Loan Has Been Approved and Funded', 'body': "Great news! Your loan application has been approved and we're sending your funds right away.\n\nYou'll receive $48,820.00 in your account within 1-2 business days. This is the net amount after any applicable fees or adjustments.\n\nIf you have any questions about your loan, please don't hesitate to reach out. Thank you for choosing us!"}
+================================
+
+
+Run 2: a loan that trips manual review
+  [calculate_deductions] base_fee=100000.0, tax=18000.0, total_deductions=118000.0
+  [calculate_net_payout] {'net_disbursement': 4882000.0, 'status': 'READY_FOR_TRANSFER'}
+  [check_compliance_threshold] net_disbursement=4882000.0, manual_review_limit=1000000.0
+  [log_decision] final decision: {'net_disbursement': 4882000.0, 'status': 'PENDING_MANUAL_REVIEW'}
+  [dispatch_notification] subject: Your Loan Application – Next Steps
+  [dispatch_notification] body: Thank you for your loan application. We're pleased to let you know that your loan for $4,882,000 has been approved and is moving forward.
+
+To complete the final steps, our compliance team is performing a quick routine review. This is a standard part of our process and typically takes just a few business days. Once this review is complete, your funds will be disbursed promptly.
+
+We'll notify you as soon as your money is on the way. If you have any questions in the meantime, please don't hesitate to reach out.
+
+Thank you for choosing us.
+
+======== Final Response ========
+loan_amount=5000000 -> {'subject': 'Your Loan Application – Next Steps', 'body': "Thank you for your loan application. We're pleased to let you knowthat your loan for $4,882,000 has been approved and is moving forward.\n\nTo complete the final steps, our compliance team is performing a quick routine review. This is a standard part of our process and typically takes just a few business days. Once this review is complete, your funds will be disbursed promptly.\n\nWe'll notify you as soon as your money is on the way. If you have any questions in the meantime, please don't hesitate to reach out.\n\nThank you for choosing us."}
+================================
+```
+
+The intermediate nodes in the workflow print their own diagnostic messages, so you can _see_ the sequence in which they are called. At the end, you get the notification message (structured output) - text of your `subject` & `body` could be different from what is shown above, because that is non-deterministic output generated by an LLM (_Agent node_ to be precise!)
 
 ## Part 3: task mode
 

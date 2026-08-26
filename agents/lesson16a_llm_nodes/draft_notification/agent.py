@@ -17,6 +17,17 @@ from google.adk.agents import Agent
 from common.model_config import get_model
 
 
+def _trigger_structured_output() -> str:
+    """Placeholder tool, never meant to be called.
+
+    See the explanation below the code listing for why this exists.
+
+    Returns:
+        A string that should never be seen.
+    """
+    return "not used"
+
+
 class NotificationMessage(BaseModel):
     """The structured shape draft_notification_agent must return.
 
@@ -29,7 +40,7 @@ class NotificationMessage(BaseModel):
     body: str
 
 
-_INSTRUCTION = """You are a loan operations assistant.
+INSTRUCTION = """You are a loan operations assistant.
 You will receive a JSON object describing a loan decision, with keys
 `net_disbursement` and `status`. `status` is either `AUTO_DISBURSED` or
 `PENDING_MANUAL_REVIEW`.
@@ -45,7 +56,8 @@ draft_notification_agent = Agent(
     name="draft_notification_agent",
     model=get_model("primary"),
     description="Drafts a structured customer notification for a loan decision.",
-    instruction=_INSTRUCTION,
+    instruction=INSTRUCTION,
+    tools=[_trigger_structured_output],
     output_schema=NotificationMessage,
 )
 # No mode= set here on purpose. A standalone Agent used directly as a

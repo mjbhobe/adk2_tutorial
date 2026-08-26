@@ -17,6 +17,16 @@ No warranties or guarantees of any kind.
 
 import asyncio
 import json
+import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
+# pull in agents/commmon folder into system path, so Agent
+# can find the get_model() function
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from google.adk.runners import InMemoryRunner
 
@@ -46,7 +56,9 @@ async def run_loan(runner: InMemoryRunner, session_id: str, loan_amount: float) 
         payload, quiet=True, session_id=session_id, user_id="lesson16a_user"
     )
 
-    print(f"loan_amount={loan_amount} -> {events[-1].output}\n")
+    print(f"\n======== Final Response ========")
+    print(f"loan_amount={loan_amount} -> {events[-1].output}")
+    print(f"================================\n\n")
 
 
 async def main() -> None:
