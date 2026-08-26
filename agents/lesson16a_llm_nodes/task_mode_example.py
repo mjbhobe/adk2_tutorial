@@ -15,6 +15,16 @@ No warranties or guarantees of any kind.
 """
 
 import asyncio
+import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
+# pull in agents/commmon folder into system path, so Agent
+# can find the get_model() function
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from google.adk.workflow import START, Workflow
 from google.adk.runners import InMemoryRunner

@@ -30,7 +30,7 @@ class GracePeriodDecision(BaseModel):
     extension_days: int
 
 
-_INSTRUCTION = """You are a loan operations assistant.
+INSTRUCTION = """You are a loan operations assistant.
 You will receive a loan's status. Call `lookup_grace_period` with that
 status to check eligibility, then decide the final extension in days.
 Call `finish_task` once you have decided, do not just describe your
@@ -41,7 +41,7 @@ grace_period_agent = Agent(
     name="grace_period_agent",
     model=get_model("primary"),
     description="Decides whether a loan qualifies for a grace period.",
-    instruction=_INSTRUCTION,
+    instruction=INSTRUCTION,
     tools=[lookup_grace_period],
     mode="task",
     output_schema=GracePeriodDecision,
