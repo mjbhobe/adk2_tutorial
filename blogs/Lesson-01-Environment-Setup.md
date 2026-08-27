@@ -49,28 +49,29 @@ Start a new terminal and `cd` to the parent folder under which you'll be creatin
 ```bash
 uv init adk2_tutorial --python 3.12
 cd adk2_tutorial
+uv venv
 ```
 
-This gives you a `pyproject.toml`, a `.python-version` pinned to 3.12, and a placeholder `main.py` in the `adk2_tutorial` folder - you can delete the `main.py` file.
+This gives you a `pyproject.toml`, a `.python-version` pinned to 3.12, and a placeholder `main.py` in the `adk2_tutorial` folder - you can delete the `main.py` file, we don't need it. The `uv venv` command creates an empty virtual environment explicitly inside a `.venv` sub-directory (i.e. `adk2_tutorial/.venv`) without installing dependencies.
 
 Activate the local environment you just created
 
 ```bash
+# on a Mac/Linux 
 source .venv/bin/activate
+# on Windows git-bash shell (it's Scripts not bin!)
+source .venv/Scripts/activate
+# on a Windows CMD shell run
+.venv\Scripts\activate.bat
+# on a Windows Powershell run
+.venv\Scripts\Activate.ps1
 ```
 
 > 📌**NOTE:** you should always activate the local environment before installing any new modules or running any code we create.
->
-> To activate the just created local enviironment (assuming you have already `cd`ed to `adk2_tutorial` folder!), use the following command
->
-> `source .venv/bin/activate` - on Linux/Mac<br/>
-> 
-> On Windows you have the following options: <br/>
-> `.venv\Script\activate.bat` - on Windows CMD shell <br/>
-> `.venv\Script\activate.ps1` - on Windows Powershell <br/>
-> `source .venv/Script/activate` - on a git-bash shell <br/>
->
-> In all the lessons, you'll see me use the Linux/Mac version of the command, because I'm using a Manjaro KDE Linux machine as my primary development machine. Most the the commands will work as-is on a Mac. For Windows, use appropriate replacements.
+
+I switch between a Manjaro Linux and Windows 11 machine. I have setup my Windows 11 machine with the `git-bash` shell, that helps me run the same Linux commands on Windows. I use VS Code as my IDE and my default terminal is also the `git-bash` shell. You'll get the `git bash` shell _for free_ on Windows 11 once you install Git for Windows. I highly recommend you get `git bash` on Windows too.
+
+Throughout this series you'll notice that I use the Linux/Mac version of the commands (such as `source .venv/bin/activate`. Replace it with the appropriate command for your shell.)
 
 Confirm the interpreter version:
 
@@ -79,15 +80,6 @@ uv run python --version
 ```
 
 You should see `Python 3.12.x`. ADK 2.x requires Python 3.10 or newer.
-
-> 🎗️ **A matter of convenience for Windows developers**
->
-> I often switch between my Linux box and a Windows 11 box during development. I don't own a Mac 🙁.
->
-> To keep the Linux _feel_ going on Windows, I use a `git-bash` terminal. It gets installed automatically when you install `git` on Windows. I strongly recommend you use `git` for version control. You can install it on Windows from [here](https://git-scm.com/install/). Using `git-bash` is a much _lighter_ alternative to installing the complete Windows Shell for Linux (WSL), which I don't use.
->
-> Along with `git` for Windows install, I get `git-bash` and most of my _most frequently_ used commands, like `touch`, `find`, `grep` etc. for _free_. Inside the `git-bash` shell I can continue to use `/` for directory separators, so `cd c:\code\adk2_tutorial` becomes `cd /c/code/adk2_tutorial` 😊. 
-
 
 ## Step 3: Add ADK and its dependencies
 
