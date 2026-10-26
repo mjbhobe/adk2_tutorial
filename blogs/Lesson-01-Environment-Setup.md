@@ -1,8 +1,6 @@
 # Lesson 1: Setting Up Your ADK Environment
 
-Before you write a single agent, you need a workspace that won't fight you later. We're going to set up one shared
-project for this entire series, using `uv` for environment management, Python 3.12, and a direct connection to Claude,
-without pulling in LiteLLM. By the end of this lesson, you'll have a working ADK install and a verified connection to Claude Haiku, without having built an agent yet. 
+Before you write a single agent, you need a workspace that won't fight you later. We're going to set up one shared project for this entire series, using `uv` for environment management, Python 3.12, and a direct connection to Claude, without pulling in LiteLLM. By the end of this lesson, you'll have a working ADK install and a verified connection to Claude Haiku, without having built an agent yet. 
 
 ## Why one shared project instead of separate ones for each example?
 
@@ -11,10 +9,9 @@ Each lesson gets its own subfolder under `agents/`, but they all live inside one
 Two reasons for this:
 
 - `adk web` can browse a whole directory of agent subfolders at once, so you'll have a dropdown of every agent you've built so far, and can pick anyone and test it in the application, rather than having to run `adk web` separately for each project. `adk web` is a tool provided by the ADK test your agents - we'll see how to use it later.
-- You only manage one virtual environment and one set of API keys, instead of copy-pasting `.env` files fourteen times. This is very convenient when we are learning a new framework, such as the ADK.
+- You only manage one virtual environment and one set of API keys, instead of copy-pasting `.env` files into every project folder. This is very convenient when we are learning a new framework, such as the ADK.
 
-> 📌 **NOTE:** this is not the way you'd structure your projects in production. For production use, each project should
-have it's own separate folder, with it's own `.env` file holding the API keys, it's own config files etc.
+> 📌 **NOTE:** this is not the way you'd structure your projects in production. For production use, each project should have it's own separate folder, with it's own `.env` file holding the API keys, it's own config files etc.
 
 ## Step 1: Install uv
 
@@ -42,7 +39,7 @@ You want `0.5.0` or newer. `uv` handles both your Python version and your depend
 
 ## Step 2: Create the project
 
-We'll create all the code under a parent `adk2_tutorial` folder. We'll call this the **root folder of our project** - a phrase you'll encounter several times across the lessons. This folder can be created _anywhere_ on disk. We'll build our projects under this folder.
+We'll create all the code under a parent `adk2_tutorial` folder. We'll call this the **root folder of our project** - a phrase I'll use several times across the lessons. This folder can be created _anywhere_ on disk. We'll build our projects under this folder.
 
 Start a new terminal and `cd` to the parent folder under which you'll be creating the `adk2_tutorial` folder.
 
@@ -54,12 +51,12 @@ uv venv
 
 This gives you a `pyproject.toml`, a `.python-version` pinned to 3.12, and a placeholder `main.py` in the `adk2_tutorial` folder - you can delete the `main.py` file, we don't need it. The `uv venv` command creates an empty virtual environment explicitly inside a `.venv` sub-directory (i.e. `adk2_tutorial/.venv`) without installing dependencies.
 
-Activate the local environment you just created
+Activate the local environment you just created by running the following command from the `adk2_tutorial` folder. Choose the command appropriate to your OS and your preferred shell.
 
 ```bash
-# on a Mac/Linux 
+# on a Mac/Linux
 source .venv/bin/activate
-# on Windows git-bash shell (it's Scripts not bin!)
+# on Windows git-bash shell
 source .venv/Scripts/activate
 # on a Windows CMD shell run
 .venv\Scripts\activate.bat
@@ -71,7 +68,7 @@ source .venv/Scripts/activate
 
 I switch between a Manjaro Linux and Windows 11 machine. I have setup my Windows 11 machine with the `git-bash` shell, that helps me run the same Linux commands on Windows. I use VS Code as my IDE and my default terminal is also the `git-bash` shell. You'll get the `git bash` shell _for free_ on Windows 11 once you install Git for Windows. I highly recommend you get `git bash` on Windows too.
 
-Throughout this series you'll notice that I use the Linux/Mac version of the commands (such as `source .venv/bin/activate`. Replace it with the appropriate command for your shell.)
+Throughout this series you'll notice that I use the Linux/Mac version of the commands (such as `source .venv/bin/activate`. Replace it with the appropriate command for your OS and preferred shell.)
 
 Confirm the interpreter version:
 
@@ -83,7 +80,7 @@ You should see `Python 3.12.x`. ADK 2.x requires Python 3.10 or newer.
 
 ## Step 3: Add ADK and its dependencies
 
-**Once your local environment is activated** (this is important!!), run the following commands to add the required modules.
+**Once your local environment is activated** (don't forget this step!!), run the following commands to add the required modules.
 
 ```bash
 uv add google-adk==2.5.0
@@ -93,13 +90,13 @@ uv add anthropic python-dotenv pyyaml
 A few things worth explaining here:
 
 * **No `[litellm]` extra.** You might see this suggested in other tutorials, e.g. `uv add "google-adk[litellm]"`. Don't use it, at lest not for this tutorial! 
-* **We're skipping LiteLLM entirely, on purpose.** `LiteLLM` is the usual way to connect ADK to non-Gemini models, and you'll see it in most other tutorials you may have come across. Recent LiteLLM releases bundle a Rust-accelerated core built with `maturin`, and as of mid-2026, prebuilt Windows wheels for that Rust core aren't reliably published. That means `uv`/`pip` will fall back to compiling it from source. And compilation requires that a full Rust toolchain and Microsoft's C++ Build Tools be pre-installed on Windows, which is a big overhead!
+* **We're skipping LiteLLM entirely, on purpose.** `LiteLLM` is the usual way to connect ADK to non-Gemini models, and you'll see it in most other tutorials you may have come across. Recent LiteLLM releases bundle a Rust-accelerated core built with `maturin`, and as of mid-2026, prebuilt Windows wheels for that Rust core aren't reliably published. So if you are developing on Windows, your `uv add "google-adk[litellm]"` command will fall back to compiling it from source. And that will require a full Rust toolchain and Microsoft's C++ Build Tools be pre-installed on Windows, which is a big overhead! Skipping `[litellm]` saves you this headache.
 * **We're pinning our ADK to version 2.5.0.** ADK is a fast-evolving framework. Google will no doubt keep adding capabilities and deprecating others as the framework matures. By pinning the version, we ensure the code listings in this series keep working exactly as written, so nothing breaks on your end simply because the ADK version has moved on.  It also lets us verify and confirm that every piece of code we write behaves as expected against this specific version.
-* We'll be using Claude as our LLM of choice in all examples (actually in most examples - there will be a few exception where we are forced to use Gemini, which is native to the ADK). So, LiteLLM's real value (bridging to 100+ providers) doesn't buy us anything. Instead, we use ADK's native Anthropic provider, `google.adk.models.anthropic_llm`, which is built directly on Anthropic's official `anthropic` Python package. 
+* We'll be using Claude as our LLM of choice in all examples (actually in most examples - there will be a few exception where we are forced to use Gemini, which is native to the ADK). We will use ADK's native Anthropic provider, `google.adk.models.anthropic_llm`, which is built directly on Anthropic's official `anthropic` Python package. 
 
 ## Step 4: Get your API keys
 
-You need two - one for our default Claude LLM and the other for the Gemini LLM, which we'll be _forced_ to use in a few lessons where we use built-in Google Search grounding, which only works with Gemini models.
+You will need two - one for our default Claude LLM and the other for the Gemini LLM, which we'll be _forced_ to use in a few lessons where we use built-in Google Search grounding, which only works with Gemini models.
 
 **Anthropic (Claude):** console.anthropic.com → API Keys → Create Key.
 
