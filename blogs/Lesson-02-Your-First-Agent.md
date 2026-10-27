@@ -30,12 +30,9 @@ Create `agents/lesson02_first_agent/agent.py`:
 ```python
 """Lesson 2: Your First Agent.
 
-A minimal agent that answers general banking terminology questions for
-a retail bank's customer support desk.
+A minimal agent that answers general banking terminology questions for a retail bank's customer support desk.
 
-Everything here is hardcoded on purpose. Starting in Lesson 3, model
-choice move into config/models.yaml and per-agent
-config, so agents stop needing code changes to swap models.
+Everything here is hardcoded on purpose. Starting in Lesson 3, model choice move into config/models.yaml and per-agent config, so agents stop needing code changes to swap models.
 """
 
 from google.adk.agents import Agent
