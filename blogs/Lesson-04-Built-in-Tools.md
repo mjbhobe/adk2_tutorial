@@ -1,10 +1,10 @@
 # Lesson 4: Built-in Tools
 
-Lesson 3 gave an agent function tools you wrote yourself. This lesson introduces a different category: **tools that ADK ships built in**, where the model calls out to a capability Google runs on its own infrastructure rather than code sitting in your project. We'll build an agent with one directly - `google_search`, hit a real, current limitation along the way, and then build a genuine, working alternative for Claude, which is our LLM of choice for this series.
+Lesson 3 gave an agent function tools you wrote yourself. This lesson introduces a different category: **tools that ADK ships built in**, where the model calls out to a capability Google runs on its own infrastructure rather than code sitting in your project. We'll build an agent with one directly - `google_search`, hit a real, current limitation along the way, and then build a genuine, working alternative for Claude, which should also work for other non-Gemini models (like Llama, or OpenAI or another other model you prefer)
 
 ## The problem we're solving
 
-A wealth management desk's investment research team gets asked two kinds of questions constantly: "What's Reliance Industries trading at right now?" and "Why did Tesla's stock move today?" The first is a data lookup, exactly the kind of thing Lesson 3's function tools handle well. The second request would need a slightly different approach - get the latest information from the web about Tesla to the LLM and let it figure out why Tesla's stock moved today, because it could very well be related to some _market event_. That's exactly what Google's search excels
+A wealth management desk's investment research team gets asked two kinds of questions constantly: `"What's Reliance Industries trading at right now?"` and `"Why did Tesla's stock move today?"` The first is a data lookup, exactly the kind of thing Lesson 3's function tools handle well. The second request would need a slightly different approach - get the latest information from the web about Tesla to the LLM and let it figure out why Tesla's stock moved today, because it could very well be related to some _market event_. That's exactly what Google's search excels
 at, and what we are going to leverage for the 2nd kind of request.
 
 ![Using Built-in Tools](images/Using%20Built-in%20Tools.png)
@@ -22,7 +22,11 @@ uv add yfinance
 
 `yfinance` pulls market data from Yahoo Finance for free, no API key required, and works for US, Indian (NSE/BSE), and European tickers alike. No additional dependencies required for `google_search` as it's a tool built into the ADK by Google.
 
-Create the shared tools file. We're putting this in the `agents/common/` folder, since a stock price lookup is generic enough to be reused by other lessons later in this series.
+We'll create a `get_stock_price` finance tool, which looks up the current live price given a ticker (which is another word for stock symbol). The `yfinance` library uses tickers like `RELIANCE.NS` (for Reliance Industries), `MSFT` (for Microsoft) and so on. Search for the ticker on [Yahoo! Finance](https://finance.yahoo.com/) - for example, if I search for `Tesla` I will see something like this, which tells me that Tesla's ticker is `TSLA`. Indian stocks traded on NSE have tickers ending in `.NS`.
+
+![Tesla Ticker](images/tesla_on_yfinance.png)
+
+This tool is very generic and could be useful in other agents too. So, instead of creating it in a _local `tools.py` file, as we did in the previous lesson, we'll create this tool in the `agents/common/finance_tools.py`, which is a file common to all our agents.
 
 Create `agents/common/finance_tools.py`:
 

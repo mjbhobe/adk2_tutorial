@@ -247,6 +247,15 @@ $$P = \frac{E \cdot \left[(1 + r)^n - 1\right]}{r \cdot (1 + r)^n} = \frac{10000
 
 * However, if the sum of all your _existing_ EMIs is >= 40,000 (calculated from FOIR), then you do not qualify for any further loans!
 
+> [!Important]
+> 📌 **ALWAYS RETURN `dicts` FROM TOOL FUNCTIONS!**
+>
+> Notice that both our function tools return Python `dict` objects that looks like JSON objects - for both success & failure cases. This is no coincidence. Returning `dicts` is a good practice. Nothing stops you from returning a plain string from a tool - for example, our `check_loan_eligibility` tool could have returned a string like `"Sorry, you are not eligible for his loan."`. However, when you return a `dict` such as `{"is_eligible": True, "max_affordable_emi": 10000.25, "max_loan_amount": 11,456.55, "max_foir_percent": 40}` you give the AI clear, labeled boxes of information. This makes it effortless for the AI to know exactly what happened, and it allows you to add a rich set of information, which will only aid the model (LLM) to make better decisions.
+>
+> There is also a _technical reason_: The underlying **function-calling spec** that Gemini, Claude, and most providers share **requires a tool's result to reach the model as a dict-shaped payload**. ADK enforces this at the framework level: if a tool returns anything other than a `dict` shaped result, for example a plain string, a number, a list, then ADK will automatically wrap it into `{"result": <value>}` dict before sending it back, so returning a non-dict wouldn't actually break anything.
+>
+> Returning a dict yourself is what gives you control over that shape instead of accepting the generic, unlabeled `result` wrapper. It's also what makes error handling legible to ADK itself: `FunctionTool` includes a built-in telemetry hook that checks specifically for a dict containing an `error` key to detect and log tool failures. The `found` / `error` pattern used here isn't just readable to the model, it's a shape ADK's own internals are already built to recognize.
+
 Create `agents/lesson03_function_tools/agent.py`:
 
 ```python
@@ -311,11 +320,13 @@ Notice that instead of using `model = AnthropicLlm(model="claude-haiku-4-5-20251
 
 The `tools` parameter on `Agent(...)` is new: it's a list of plain Python functions, and ADK automatically wraps each one into a callable tool the model can invoke. You didn't need to write any schema, registration boilerplate, or JSON definitions by hand. ADK builds the function's schema (its name, its parameters, and their types) directly from the function's signature, using your type hints to know that `principal` is a number and `tenure_months` is an integer, for instance. It doesn't matter that the functions live in a separate file, ADK inspects each function object itself, not the file it was defined in.
 
-> 📌 **NOTE**  
+> [!Important]  
 > 
-> **The docstring on each function matters more than it might look like**. ADK takes the entire docstring, not just a one-line summary, and sends it to the model as the tool's description. This is how the model decides which tool to call and how to fill in the arguments correctly. A vague docstring produces a tool the model calls incorrectly or not at all; the detailed Args and Returns sections above are doing real work, not just satisfying a style guide. 
+> 📌 **The docstring on each function matters more than it might look like**. 
 >
-> One caveat worth knowing: as of the current ADK release, per-parameter descriptions in the Args section aren't parsed out into a structured schema field individually, the whole docstring travels to the model as one block of text. Writing clear per-argument descriptions still helps, since the model reads that whole block, but don't expect them to show up as separate structured metadata if you go digging through the generated tool schema. <br/><br/>
+> ADK takes the entire docstring, not just a one-line summary, and sends it to the model as the tool's description. This is how the model decides which tool to call and how to fill in the arguments correctly. A vague docstring produces a tool the model calls incorrectly or not at all; the detailed Args and Returns sections above are doing real work, not just satisfying a style guide. 
+>
+> One caveat worth knowing: as of the current ADK release, per-parameter descriptions in the Args section aren't parsed out into a structured schema field individually, the whole docstring travels to the model as one block of text. Writing clear per-argument descriptions still helps, since the model reads that whole block, but don't expect them to show up as separate structured metadata if you go digging through the generated tool schema.
 
 Also notice the agent's `instruction` text field explicitly tells the model never to estimate a number itself and to always use the tools. _This is a real, necessary line of defense_: nothing stops a language model from confidently calculating a wrong EMI in its head if you don't tell it not to. Instructing it to only report tool outputs is what actually enforces the "let Python do the math" design.
 
