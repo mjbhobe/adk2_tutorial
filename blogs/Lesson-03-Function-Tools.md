@@ -136,8 +136,8 @@ def calculate_emi(
 
     Args:
         principal: The loan amount being borrowed, in the local currency.
-        annual_interest_rate_percent: The annual interest rate as a
-            percentage, for example 8.5 for 8.5%.
+        annual_interest_rate_percent: The annual interest rate as a percentage, 
+            for example 8.5 for 8.5%. 
         tenure_months: The loan repayment period in months.
 
     Returns:
@@ -177,7 +177,7 @@ def check_loan_affordability(
     Uses FOIR (Fixed Obligation to Income Ratio), a standard lending
     guardrail that caps total monthly loan obligations as a percentage
     of monthly income. Most retail lenders use a FOIR ceiling between
-    40 and 50 percent.
+    40 and 55 percent.
 
     Args:
         monthly_income: The customer's gross monthly income.
@@ -212,6 +212,7 @@ def check_loan_affordability(
 
     monthly_rate = (annual_interest_rate_percent / 100) / 12
     growth_factor = (1 + monthly_rate) ** tenure_months
+    # reverse of the EMI formula
     max_loan_amount = (
         max_new_emi * (growth_factor - 1) / (monthly_rate * growth_factor)
     )
@@ -223,6 +224,28 @@ def check_loan_affordability(
         "max_foir_percent": max_foir_percent,
     }
 ```
+
+The `calculate_emi` function uses the following formula to calculate the EMI:
+
+$$E = \frac{P \cdot r \cdot (1 + r)^n}{(1 + r)^n - 1}$$
+
+Where:
+- $E$ = calculate EMI
+- $P$ = Principal loan amount
+- $r$ = Monthly interest rate ($\frac{\text{Annual Rate}}{12 \times 100}$)
+- $n$ = Loan duration in _months_
+
+To calculate max loan eligibility, we use something called FOIR (or Fixed Obligation to Income Ratio). This is the primary metric banks and lenders use to determine how much loan you can afford to repay. In plain terms, it measures what percentage of your monthly income is already eaten up by fixed debt payments (EMIs) versus what is left for living expenses, savings, and a new loan. Most banks & lenders use a FOIR value between 40 - 55% (sometimes 60-65% for HNIs).
+
+Here is the simple logic that the `check_loan_affordability` function uses to calculate loan eligibility amount:
+* Suppose your monthly income is 1 Lakh (1,00,000) and the bank assumes a FOIR = 40% for you.
+* This simply means that the total EMIs from all your loans can add up to a max value of 40% * 1,00,000 = 40,000. 
+* Thefore, if the sum of all your _existing_ EMIs is already 30,000 then for a new loan, you can afford a max of 10,000 only.
+* Assuming an annual rate of 8.5%, a tenure of 24 months and applying the _reverse_ of the EMI formlua above, the total _new_ loan you'll be eligible for is:
+
+$$P = \frac{E \cdot \left[(1 + r)^n - 1\right]}{r \cdot (1 + r)^n} = \frac{10000 \cdot \left[\left(1 + \frac{8.5}{1200}\right)^{240} - 1\right]}{\frac{8.5}{1200} \cdot \left(1 + \frac{8.5}{1200}\right)^{240}} \approx ₹11,52,045$$
+
+* However, if the sum of all your _existing_ EMIs is >= 40,000 (calculated from FOIR), then you do not qualify for any further loans!
 
 Create `agents/lesson03_function_tools/agent.py`:
 
@@ -256,6 +279,7 @@ AGENT_INSTRUCTION = (
 
 root_agent = Agent(
     name="loan_calculator_agent",
+    # here we use our get_model() function to get the appropriate LLM
     model=get_model("primary"),
     instruction=AGENT_INSTRUCTION,
     description=(
@@ -276,12 +300,14 @@ Your lesson's folder now looks like this:
 
 ```
 agents/lesson03_function_tools/
-├── __init__.py
-├── agent.py
-└── tools.py
+        ├── __init__.py
+        ├── agent.py
+        └── tools.py
 ```
 
 A few things worth explaining about what's happening across these two files. The `from .tools import calculate_emi, check_loan_affordability` line in `agent.py` is a relative import, the leading dot means "from the `tools` module in this same package." This works because ADK loads `lesson03_function_tools` as a proper Python package (that's exactly what the `__init__.py` file is for), so the usual Python package rules apply, and `agent.py` can reach its sibling `tools.py` file this way.
+
+Notice that instead of using `model = AnthropicLlm(model="claude-haiku-4-5-20251001")` as we did in Lesson 02, we now call our `get_model("primary")` function. It reads our `config.yaml` file and returns the appropriate model - our primary model as configured is Claude Haiku 4.5. You can completely modify the model definitions in `config.py` to use completely diffrent models (LLMs), so long as the ADK supports them.
 
 The `tools` parameter on `Agent(...)` is new: it's a list of plain Python functions, and ADK automatically wraps each one into a callable tool the model can invoke. You didn't need to write any schema, registration boilerplate, or JSON definitions by hand. ADK builds the function's schema (its name, its parameters, and their types) directly from the function's signature, using your type hints to know that `principal` is a number and `tenure_months` is an integer, for instance. It doesn't matter that the functions live in a separate file, ADK inspects each function object itself, not the file it was defined in.
 
@@ -321,9 +347,14 @@ I earn 150,000 a month and already pay 20,000 in EMIs. Could I afford that same 
 
 You should see it call `check_loan_affordability` this time, and answer with a clear yes-or-no plus the maximum loan or EMI it calculated, rather than trying to reuse the previous answer.
 
-Here is how it may look for your (this is a screenshot of my Terminal on a Manjaro Linux KDE system)
+Here is how it _may_ look for your (this is a screenshot of my Terminal on a Manjaro Linux KDE system)
 
 ![Function Tools Console Run](images/function_tools_console_run.png)
+
+> [!Warning]
+> <small>**LLM OUTPUT IS PROBABALISTIC NOT DETERMINISTIC**</small>
+>
+> So don't expect to see the same output as mine. Also, don't expect to see the exact same response (except the numbers!) even if you ask the same question twice. This is just the way LLMs (any provider's LLMs) work.
 
 For the web UI, run the following command from your terminal (or your IDE's terminal - I use VS Code). Make sure that the local environment is active.
 
