@@ -101,13 +101,9 @@ def get_stock_price(ticker: str) -> dict:
 
 This returns a dict with a `found` flag and either the data or an error message, rather than letting an exception escape. That matters specifically for tool functions: if this raised an uncaught exception on a bad ticker, the whole agent turn would fail. Returning a structured "not found" result instead lets the model see what went wrong and respond sensibly, for example by asking the customer to double check the ticker symbol.
 
-> 📌**NOTE:** Every tool function in this series returns a `dict`, and it's worth knowing why, since it's not an arbitrary style choice.
->
-> The underlying **function-calling spec** that Gemini, Claude, and most providers share **requires a tool's result to reach the model as a dict-shaped payload**. ADK enforces this at the framework level: if a tool returns anything other than a `dict` shaped result, for example a plain string, a number, a list, then ADK will automatically wrap it into `{"result": <value>}` dict before sending it back, so returning a non-dict wouldn't actually break anything.
->
-> Returning a dict yourself is what gives you control over that shape instead of accepting the generic, unlabeled `result` wrapper. It's also what makes error handling legible to ADK itself: `FunctionTool` includes a built-in telemetry hook that checks specifically for a dict containing an `error` key to detect and log tool failures. The `found` / `error` pattern used here isn't just readable to the model, it's a shape ADK's own internals are already built to recognize.
+The line `history = stock.history(period="5d")` returns a `pandas` DataFrame with 5 rows into the `history` variable. It looks something like this - the `Close` column returns the closing price as of date, which should make the rest of the code easy to understand.
 
-Notice too that `get_stock_price` uses `stock.history()` rather than `stock.info` as the primary source for the price itself. Yahoo Finance's `.info` endpoint is known to be less reliable and more prone to rate-limiting than the historical-data endpoint, so we only fall back to `.info` for the company name, wrapped in its own `try/except` so a failure there doesn't take down the whole function.
+![yFinance DataFrame](images/yfinance_dataframe.png)
 
 Now let's code the agent. 
 
@@ -151,7 +147,11 @@ root_agent = Agent(
 
 **Hey, where's my Claude model?** 🤨
 
-An astute reader will immediately notice that we are not using our Claude model with this agent - instead we now have `model="gemini-3.5-flash-latest"` appearing instead. This isn't incidental; we aren't just showing how easy it is to switch to another LLM with ADK (which is really that easy by the way!). This is infact a fundamental limitation of ADK with internal tools. **Internal tools like Google Search work only on Google's own model-serving infrastructure and cannot be used with non-Gemini models**. If we use `model=get_model("primary")` as we have been doing so far, which points to a Claude model (specifically Claude Haiku), the agent will fail at runtime. We will address this limitation with a custom search function later in this lesson.
+An astute reader will immediately notice that we are not using our Claude model with this agent - instead we now have `model="gemini-3.5-flash-latest"` appearing instead. This isn't a mistake. This is infact a fundamental limitation of ADK with internal tools. **Internal tools, such as Google Search, work only on Google's own model-serving infrastructure and cannot be used with non-Gemini models** 😦. If we use `model=get_model("primary")` as we have been doing so far, which points to a Claude model (specifically Claude Haiku), the agent will fail at runtime. We will address this limitation with a custom search function later in this lesson, but for now understand & note this limitation!
+
+> [!Warning]
+>
+> ADK **does not support** non-Gemini models with internal tools such as Google Search!
 
 Create `agents/lesson04_built_in_tools/__init__.py`:
 
@@ -159,27 +159,27 @@ Create `agents/lesson04_built_in_tools/__init__.py`:
 from . import agent
 ```
 
-One detail here needs a word of explanation before you run it, especially if you've seen older ADK examples that show search grounding as simply `tools=[google_search]`. That pattern isn't wrong, it's just dated: prior to ADK Python release 1.16 (October 2025), `google_search` genuinely could not be combined with _any other tool_ in the same agent, only one built-in tool, by itself, per agent, so `tools=[google_search]` alone was the only supported shape 😮!
-
-`google_search` itself is a ready-made, pre-built instance of the search tool that ADK exports directly, and it's still the simplest way to add search grounding when it's the *only* tool an agent needs. Here, though, we're also giving the agent our custom `get_stock_price` tool, and that's exactly the situation the plain `google_search` singleton doesn't handle. Drop it into this agent's tools list alongside `get_stock_price` and you'd hit an error, not a working two-tool agent! `tools=[get_stock_price, google_search]` will simply not work 😟!
-
-That's what the `GoogleSearchTool(bypass_multi_tools_limit=True)` is for. Instead of using the pre-built `google_search` instance, we construct the underlying `GoogleSearchTool` class ourselves and pass the flag that explicitly opts into combining it with other tools. This flag has been available since ADK 1.16 release, well before ADK 2.0, so this isn't a 2.x-only capability; if you've been working with a recent ADK 1.x codebase, you've had access to this fix the whole time, you just needed to know it existed 😎!
-
-That raises a fair question: _"if the fix is one keyword argument, why isn't it just the default behavior of `google_search` itself?"_ Because it isn't actually free. Under the hood, setting the flag causes ADK to run the search as an isolated sub-agent call rather than a true inline model built-in: a separate, hidden model invocation handles the search and hands the result back to the main agent. That hidden sub-agent call is a genuine extra model invocation, with its own latency and its own token cost, every single time search fires. If Google had made this the default, every existing single-tool search agent out there would have silently started making an extra hidden model call per search, with no code change and no warning, changing everyone's cost and latency profile overnight. You should, in fact, thank Google for this 😊.
-
-**The rule of thumb going forward:** reach for the plain `google_search` singleton when search grounding is the _only tool_ on an agent, and switch to `GoogleSearchTool(bypass_multi_tools_limit=True)` explicitly (knowing you'll incur more token costs!) the moment you need to combine it with anything else, exactly like we're doing here. 
-
-One thing that flag does not change though: it only relaxes the one-built-in-tool-per-agent restriction, not the model restriction, so `GoogleSearchTool`, with or without `bypass_multi_tools_limit`, still works _only with Gemini models_ 🙁. 
+> [!Note]
+>
+> One detail here needs some explanation: you may have seen older ADK examples that show search grounding as simply `tools=[google_search]`. That pattern isn't wrong, it's just dated: prior to ADK Python release 1.16 (October 2025), `google_search` genuinely could not be combined with _any other tool_ in the same agent, only one built-in tool, by itself, per agent, so `tools=[google_search]` alone was the only supported shape 😮!
+>
+> `google_search` itself is a ready-made, pre-built instance of the search tool that ADK exports directly, and it's still the simplest way to add search grounding when it's the *only* tool an agent needs. Here, we're also giving the agent our custom `get_stock_price` tool, and that's exactly where using just a plain `google_search` singleton will fail catastropically 😟!
+>
+> And that's what the `GoogleSearchTool(bypass_multi_tools_limit=True)` is for 😀. While using this constructs helps us combine Google Search with other function tools, it still requires a Google only LLM (i.e. only Gemini models). **Note that this mechanism has been available since ADK 1.16 release** 😎!
+>
+> That raises a fair question: _"if the fix is one keyword argument, why isn't it just the default behavior of `google_search` itself?"_ Because it isn't actually free. Under the hood, setting the flag causes ADK to run the search as an isolated sub-agent call rather than a true inline model built-in: a separate, hidden model invocation handles the search and hands the result back to the main agent. That hidden sub-agent call is a genuine extra model invocation, with its own latency and its own token cost, every single time search fires. If Google had made this the default, every existing single-tool search agent out there would have silently started making an extra hidden model call per search, with no code change and no warning, changing everyone's cost and latency profile overnight. You should, in fact, thank Google for this 😊.
+>
+> **The rule of thumb going forward:** reach for the plain `google_search` singleton when search grounding is the _only tool_ on an agent, and switch to `GoogleSearchTool(bypass_multi_tools_limit=True)` explicitly (knowing you'll incur more token costs!) the moment you need to combine it with anything else, exactly like we're doing here. 
 
 Ok, enough of _gyan_. Let's run our agent! 
 
-Type in the following command(s) from the project root folder in a new terminal:
+In a new terminal, type in the following command(s) from the project root (`adk2_tutorial`) folder:
 
 ```bash
 # activate the local env first!
 source .venv/bin/activate 
 # run the agent
-uv run adk run agents/lesson04_built_in_tools
+PYTHONWARNINGS=ignore uv run adk run agents/lesson04_built_in_tools
 ```
 
 Ask about a price:
@@ -188,7 +188,12 @@ Ask about a price:
 What's Reliance Industries trading at? Ticker is RELIANCE.NS
 ```
 
-You should see it call `get_stock_price` and come back with a current close price, the previous close, and the percentage move, worded as a short factual statement. I got a response like the following - your's would be different as it's a _live_ price that is being displayed. Check on the Yahoo Finance! website that it shows the same values. Mine tallied the day I ran it, so all good!
+
+> [!Warning]
+>
+> You need to provide your stock ticker (such as RELIANCE.NS) in the above prompt. Our Agent has no ability to figure out the ticker symbol given the company name, such as Reliance Industries.
+
+You should see it call `get_stock_price` and come back with a current close price, the previous close, and the percentage move, worded as a short factual statement. I got a response like the following - your's would be different as it's a _live_ price that is being displayed. Check on the Yahoo Finance! website that it shows the same values. Mine tallied the day I ran it, so all good.
 
 > [market_briefing_agent]: Reliance Industries Limited (RELIANCE.NS) is trading at **₹1,267.70**, down **-0.96%** (a decrease of ₹12.30) from its previous close of ₹1,280.00.
 
@@ -307,7 +312,7 @@ def get_stock_news(company_or_ticker: str, max_results: int = 5) -> dict:
         return {"found": False, "query": company_or_ticker, "error": str(error)}
 ```
 
-Now build the Claude-side agent. **NOTE** - this is created in a separate folder than the Google agent - don't create in same folder! 
+Now build the Claude-side agent. **NOTE** - this is created in a separate folder than the Google agent - don't create in same folder as the Google Search powered agent! 
 
 Create `agents/lesson04_market_briefing/agent.py`:
 
@@ -331,8 +336,10 @@ AGENT_INSTRUCTION = (
     "You are an investment research assistant for a wealth management "
     "desk. Use get_stock_price when a customer asks about a stock's "
     "current or recent price. Use get_stock_news when a customer asks "
-    "why a stock moved, or wants recent news about a company. Always "
-    "cite that news came from a web search, and include source URLs "
+    "why a stock moved, or wants recent news about a company. For stock "
+    "news of Indian stocks use sources such as Moneycontrol, Economic Times, "
+    "LiveMint, Business Standard, CNBC-TV18, NDTV Profit, Financial Express etc. "
+    "Always cite that news came from a web search, and include source URLs "
     "when you report on news articles. If a ticker can't be found, "
     "ask the customer to confirm the symbol and exchange rather than "
     "guessing. You are not providing investment advice, only "
