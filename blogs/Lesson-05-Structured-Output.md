@@ -4,7 +4,7 @@ Lesson 4 gave an agent access to live data and current web information. Everythi
 
 ## The problem we're solving
 
-A retail bank's underwriting desk has loan officers reviewing applicant files and writing up a risk assessment for each one: a risk tier, a recommendation, a note on the key concerns. Today _that write-up is free text, and free text is a real operational problem here_. One officer writes "high risk, wouldn't approve," another writes "Risk: High. Recommend decline. Reasons: thin credit history, high DTI." Nothing downstream, the approval queue, the audit trail, the regulator-facing report, can reliably parse either one, because there's no guaranteed structure. Someone ends up manually re-keying every assessment into a spreadsheet before it's usable anywhere else.
+A retail bank's underwriting desk has loan officers reviewing applicant files and writing up a risk assessment for each one: a risk tier, a recommendation, a note on the key concerns. Today _that write-up is free text, and free text is a real operational problem here_. One officer writes `"high risk, wouldn't approve,"` another writes `"Risk: High. Recommend decline. Reasons: thin credit history, high DTI."`. **Plain text is hard to parse!** Nothing downstream, the approval queue, the audit trail, the regulator-facing report, can reliably parse either one, because there's no guaranteed structure. Someone ends up manually re-keying every assessment into a spreadsheet before it's usable anywhere else.
 
 We're going to build an agent that produces a credit risk assessment as its output, but instead of a paragraph, it will return a fixed, validated JSON shape every time: a _risk tier_ that's always one of three exact values, a boolean _recommendation_, a _maximum recommended loan amount_, a _list of specific risk factors_, and a short _rationale_. Every field, every time, in the same shape, ready to be written straight into a database row or an API call without anyone touching it by hand.
 
@@ -16,11 +16,9 @@ Left alone, an LLM's output is just text, and text is inherently unpredictable i
 
 ADK's `output_schema` closes that gap by working at a different level than the prompt. You define the exact shape you want as a Pydantic model, a Python class describing each field's name, type, and (optionally) a description. When you attach that schema to an agent, ADK passes it to the model as a formal constraint on the response, not just an instruction in the prompt text, and validates the model's final answer against it. If the response doesn't match the schema, that's a failure ADK can catch, rather than something a downstream system finds out about the hard way, three steps later, after a $0 has silently made it into a loan amount field - yikes 😰!
 
-One thing worth knowing before we write the code: older ADK versions did not allow `output_schema` and tools on the same agent. Forcing a fixed output shape and letting the model call functions used to conflict with each other. That restriction was lifted around ADK 1.17–1.19, well before the version 2.5.0 we're using, so this combination works today.
-
-> 📌 **NOTE - One caveat worth being upfront about:**
->
-> ADK's own current docs say this combination is only fully supported, in a reliable way, on specific models like Gemini 3.0. For other models, ADK falls back to a workaround, it quietly adds a hidden tool the model must call to hand back its structured answer, and Google's own documentation says this fallback "may not work reliably" on every model. We're running this agent on Claude, not Gemini 3.0, so we're relying on that fallback. It should work fine for a simple case like ours, one schema, one small tool, but if you ever see the model returning plain text instead of the structured shape you expect, this is the first thing to suspect.<br/>
+> [!Note]
+> 
+> **Older ADK versions did not allow `output_schema` and tools on the same agent**. Forcing a fixed output shape and letting the model call functions used to conflict with each other. That restriction was lifted around ADK 1.17–1.19, well before the version 2.5.0 we're using in this tutorial series. Not an issue for us, but something worth noting.
 
 ## Step 1: Write the debt-to-income calculator
 
