@@ -2,7 +2,7 @@
 
 In this lesson, we'll build and run our first working ADK agent: a simple assistant for a retail bank's customer support desk that explains everyday banking terms like APR, EMI, KYC, and overdraft in plain English language. It won't touch real customer data nor do anything BFSI-specific yet, that starts in Lesson 3, but it's enough to show you the three things every ADK agent needs, and the two ways you can run one on your machine.
 
-We'll also see the same agent answer using two different models, Claude Haiku and Gemini Flash, by changing a single line of code! That's worth seeing early, since it tells you something true about ADK: your agent code generally doesn't change when you swap the model underneath it.
+We'll also see the same agent answer using two different models, Claude Haiku and Gemini Flash, by changing a single line of code! It tells you something about ADK: your agent code generally doesn't change when you swap the model underneath it, and it's really easy to switch the underlying model when using the ADK.
 
 We'll also see how we can _tweak_ the behavior of our agent via _hyper-parameters_ such as `temperature`, `max_tokens`, `top_p` and `top_k`.
 
@@ -21,7 +21,7 @@ mkdir -p agents/lesson02_first_agent
 mkdir agents\lesson02_first_agent
 ```
 
-You don't need a separate `.env` file inside this folder. ADK automatically looks upward from an agent's folder for a `.env` file, so the one you created at `adk2_tutorial/.env` back in Lesson 1 already covers every agent folder we'll create in this series.
+For this tutorial series, you don't need a separate `.env` file inside each agent folder. ADK automatically looks upward from an agent's folder for a `.env` file, so the one you created at `adk2_tutorial/.env` back in Lesson 1 already covers for every agent folder we'll create in this series. However, in an actual deployment scenario, _every ADK project folder should have it's own `.env` file_. 
 
 ## Step 2: Write the agent
 
@@ -77,23 +77,23 @@ That's it! That's your whole agent 😮. Three required attributes: a `model`, a
 
 ## What each parameter in `Agent(...)` actually does
 
-Before we move on, it's worth knowing what each of the parameters of the `Agent`'s constructor actually do, since we'll use all of them in every agent we'll build for the rest of this series.
+Before we move on, let's understand what each of the parameters of the `Agent`'s constructor actually does, since we'll use all of them in every agent we'll build for the rest of this series.
 
-- **`name`** (mandatory❗) — a unique identifier for this agent. ADK enforces two rules on it: **it must be a valid Python identifier** (same rules as naming a Python variable - letters, digits, underscores, no spaces or hyphens, can't start with a digit), and **it can't be the literal string `"user"`** (ADK reserves `user` for the end user's own input). Once you start building multi-agent systems, this name is also how one agent refers to another, so it's worth naming agents descriptively from the start, the way we did with `bfsi_support_desk_agent`.
+| Parameter | Purpose |
+| :-- | :-- |
+| **`name`** (mandatory❗) | A unique identifier for this agent. ADK enforces two rules on it: **it must be a valid Python identifier** (same rules as naming a Python variable - letters, digits, underscores, no spaces or hyphens, can't start with a digit), and **it can't be the literal string `"user"`** (ADK reserves `user` for the end user's own input). Once you start building multi-agent systems, this name is also how one agent refers to another, so it's worth naming agents descriptively from the start, the way we did with `bfsi_support_desk_agent`|
+| **`model`** (mandatory❗) | Which LLM answers on this agent's behalf. It's either a plain string (for models ADK resolves natively, like Gemini) or a model object you construct yourself (as we just did for Claude, with `AnthropicLlm(...)`). This is the one parameter you'll see change the most across the series as we swap between Haiku, Sonnet, and Gemini Flash depending on the lesson|
+| **`instruction`** (mandatory❗) | **The system prompt**: your agent's standing directions for how to behave, what tone to use, and what it should and shouldn't do. This is the single biggest lever you have over an agent's behavior, and it's worth spending real time on. Later in the series, once we cover sessions and state, you'll see this field can also contain placeholders like `{customer_name}` that get filled in from live conversation data, rather than being fixed text like it is here.|
+| **`description`** (optional) | A short, one-line summary of what this agent does, separate from `instruction`. It doesn't affect how the agent behaves at all. It matters once an agent has other agents working under it: the parent uses each sub-agent's `description` to decide which one to hand a task to - so when it comes to multi-agent systems, treat this as mandatory. In this lesson, with a single standalone agent, it's doing nothing functionally yet, but it's good practice to write it accurately from the start, since it becomes load-bearing the moment this agent joins a larger system in later lessons.|
 
-- **`model`** (mandatory❗) — which LLM answers on this agent's behalf, either a plain string (for models ADK resolves natively, like Gemini) or a model object you construct yourself (as we just did for Claude, with `AnthropicLlm(...)`). This is the one parameter you'll see change the most across the series as we swap between Haiku, Sonnet, and Gemini Flash depending on the lesson.
+> 📌 **NOTE** These aren't the only attributes of the `Agent`'s constructor. There are many more, which we will gradually _expose_ in later lessons.
 
-- **`instruction`** (mandatory❗) — the system prompt: your agent's standing directions for how to behave, what tone to use, and what it should and shouldn't do. This is the single biggest lever you have over an agent's behavior, and it's worth spending real time on. Later in the series, once we cover sessions and state, you'll see this field can also contain placeholders like `{customer_name}` that get filled in from live conversation data, rather than being fixed text like it is here.
-
-- **`description`** (optional) — a short, one-line summary of what this agent does, separate from `instruction`. It doesn't affect how the agent behaves at all. It matters once an agent has other agents working under it: the parent uses each sub-agent's `description` to decide which one to hand a task to - so when it comes to multi-agent systems, treat this as mandatory. In this lesson, with a single standalone agent, it's doing nothing functionally yet, but it's good practice to write it accurately from the start, since it becomes load-bearing the moment this agent joins a larger system in later lessons.
-
-> 📌 **NOTE** These arn't the only attributes of the `Agent`'s constructor. There are many more, which we will gradually _expose_ in later lessons.
-
-## A caveat worth knowing: Claude and Gemini aren't resolved the same way
-
-Notice that Gemini gets passed in as a plain string (`"gemini-3.5-flash-lite"`), but Claude gets wrapped in an `AnthropicLlm(...)` object instead of a string like `"claude-haiku-4-5-20251001"`. This isn't a style choice, it's necessary, and it's worth understanding so it doesn't trip you up later.
-
-When you give ADK a plain model name string, it looks the name up against a set of built-in patterns to decide which provider to use. Gemini names resolve straight to ADK's native Gemini support, no extra step needed. Claude names, if left as a plain string, resolve to a version of Claude meant to run through Google Cloud's Vertex AI, which expects a GCP project to be configured. Since we're using a direct Anthropic API key instead, a bare Claude string would fail with a configuration error. Wrapping it in `AnthropicLlm(...)` sidesteps that entirely and talks to Anthropic directly, using the `ANTHROPIC_API_KEY` you already set in `.env`. You'll use this same pattern every time you reach for Claude in this series.
+> [!Caution]
+> **A caveat worth knowing:** Claude and Gemini aren't resolved the same way
+>
+> Notice that Gemini gets passed in as a plain string (`"gemini-3.5-flash-lite"`), but Claude gets wrapped in an `AnthropicLlm(...)` object instead of a string like `"claude-haiku-4-5-20251001"`. This isn't a style choice, it's necessary. Make a note of this so it doesn't trip you up later.
+>
+> When you give ADK a plain model name string, it looks the name up against a set of built-in patterns to decide which provider to use. Gemini names resolve straight to ADK's native Gemini support, no extra step needed. Claude names, if left as a plain string, resolve to a version of Claude meant to run through Google Cloud's Vertex AI, which expects a GCP project to be configured. Since we're using a direct Anthropic API key instead, a bare Claude string would fail with a configuration error. Wrapping it in `AnthropicLlm(...)` sidesteps that entirely and talks to Anthropic directly, using the `ANTHROPIC_API_KEY` you already set in `.env`. You'll use this same pattern every time you reach for Claude in this series.
 
 > 💡 **What about `LiteLLM`?**
 > 
@@ -114,7 +114,7 @@ When you give ADK a plain model name string, it looks the name up against a set 
 >)
 > ```
 >
-> `LiteLlm` is a great option when you want to interface your ADK agents with a variety of LLM providers, such as OpenAI, Anthropic, Google, Llama etc. We have chosen Claude as our model of choice in this lesson series, and we fall back to Gemini only where ADK mandates using Gemini, so there is no advantage of using `LiteLlm` in this series.
+> `LiteLlm` is a great option when you want to interface your ADK agents with a variety of LLM providers, such as OpenAI, Anthropic, Google, Llama etc. We have chosen Claude as our model of choice in this lesson series, and we fall back to Gemini only where ADK mandates using Gemini, so there is no advantage of using `LiteLlm` in this series. Also, for Windows users it avoids cumbersome installs of Rust and Microsoft build SDKs (refer to note in Lesson 1)
 
 ## Step 3: Run the Agent with `adk run`
 
@@ -122,11 +122,19 @@ When you give ADK a plain model name string, it looks the name up against a set 
 
 ```bash
 # first activate your local environment
-source .venv/bin/activate # (or .venv\Scripts\activate.bat on Windows)
+# run either of these commands, depending on your OS
+
+# On Mac or Linux
+source .venv/bin/activate 
+# On Windows 
+.venv\Scripts\activate.bat
+
+# then run this command from project root folder
 uv run adk run agents/lesson02_first_agent
 ```
 
-> 📌 **NOTE** We pass a _folder name_ (specifically the name of the folder containing our `agent.py` file) to the `adk run` command - not a Python module name!
+> [!Tip]
+> We pass a _folder name_ (specifically the name of the folder containing our `agent.py` file) to the `adk run` command - not a Python module name!
 >
 > And _yes_, the `uv run adk run ...` command is correct! It's using `uv` to run the `adk run` command 😊.
 
@@ -143,7 +151,7 @@ The `bsfi_support_desk_agent` comes from the value of the `name` parameter we ga
 What does APR mean?
 ```
 
-Within a few seconds you should see a short, plain-language explanation come back, written the way you'd expect a bank's support desk to explain it to a new customer. For example you may see something like this (your text may vary because LLM output is not deterministic!):
+Within a few seconds you should see a short, plain-language explanation come back, written the way you'd expect a bank's support desk to explain it to a new customer. For example you may see something like this (your text will look different from mine because LLM output is not deterministic!):
 
 ```bash
 [user]: What does APR mean?
@@ -157,7 +165,8 @@ APR helps you compare loans fairly because it includes the interest rate plus an
 
 Try a couple more terms if you like: EMI, KYC, overdraft. Type `exit` or press `Ctrl+C` when you're done.
 
-> 🎗️ **NOTE: How to supress excessive logging messages when using `adk run`**
+> [!Tip]
+> 🎗️ How to supress excessive logging messages when using `adk run`**?
 >
 > You may have noticed a lot of log messages "dumped" on your terminal before you see the `Running agent bfsi_support_desk_agent, type exit to exit.` message. This can be quite distracting & frankly annoying at times 🤬.
 > 
@@ -218,13 +227,13 @@ Set `USE_GEMINI_FLASH` back to `False` before moving on, since Claude Haiku is o
 
 When building production systems that require reliable facts, compliance checks, or structured data extraction, deterministic and concise output is critical. You can _tune_ how an LLM samples and formats its responses by specifying generation parameters, also called _hyperparameters_.
 
-In Google ADK 2.5.0, hyperparameters are configured using `types.GenerateContentConfig` (`from google.genai`) and passed directly into the `generate_content_config` parameter of the `Agent` constructor. This provides a unified configuration interface whether you run Gemini or Claude or any other LLM.
+In Google ADK 2.5.0, hyperparameters are configured using `google.genai.types.GenerateContentConfig` class and passed directly into the `generate_content_config` parameter of the `Agent` constructor - this is an optional parameter to the `Agent(...)` constructor. This provides a unified configuration interface whether you run Gemini or Claude or any other LLM.
 
 ### Core Hyperparameters
 
 | Parameter | What it Means (What it Controls) | Possible Values | Default Value |
 | :--- | :--- | :--- | :--- |
-| **`temperature`** | Controls randomness and creativity. Lower values produce deterministic, focused answers; higher values increase output variety. | 0.0 to 1.0 (Claude) / 0.0 to 2.0 (Gemini) | 0.7 to 1.0 |
+| **`temperature`** | Controls randomness and creativity. Lower values produce more deterministic, focused answers; higher values increase output variety. | 0.0 to 1.0 (Claude) / 0.0 to 2.0 (Gemini) | 0.7 to 1.0 |
 | **`max_output_tokens`** | Sets the hard upper limit on the number of generated tokens in a single response turn. | Integer $\ge 1$ (up to model output limit) | 4096 or 8192 |
 | **`top_p` (Nucleus Sampling)** | Restricts token selection to the cumulative probability threshold $p$. Lowering it eliminates the long tail of unlikely words. | 0.0 to 1.0 | 1.0 (full distribution) |
 | **`top_k`** | Limits token selection to the top $k$ most probable candidate tokens at each generation step. | Integer $\ge 1$ | 40 (Gemini; ignored by Claude) |
@@ -270,6 +279,8 @@ generation_config = types.GenerateContentConfig(
     temperature=0.1,
     max_output_tokens=256,
     top_p=0.9,
+    # NOTE: I can specify top_k with Claude, but 
+    # Claude will ignore it. Gemini will use it.
     top_k=40,
 )
 

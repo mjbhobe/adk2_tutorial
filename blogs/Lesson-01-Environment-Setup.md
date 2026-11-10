@@ -89,7 +89,7 @@ uv add anthropic python-dotenv pyyaml
 
 A few things worth explaining here:
 
-* **No `[litellm]` extra.** You might see this suggested in other tutorials, e.g. `uv add "google-adk[litellm]"`. Don't use it, at lest not for this tutorial! 
+* **No `[litellm]` extra.** You might see this suggested in other tutorials, e.g. `uv add "google-adk[litellm]"`. Don't use it, at least not for this tutorial! 
 * **We're skipping LiteLLM entirely, on purpose.** `LiteLLM` is the usual way to connect ADK to non-Gemini models, and you'll see it in most other tutorials you may have come across. Recent LiteLLM releases bundle a Rust-accelerated core built with `maturin`, and as of mid-2026, prebuilt Windows wheels for that Rust core aren't reliably published. So if you are developing on Windows, your `uv add "google-adk[litellm]"` command will fall back to compiling it from source. And that will require a full Rust toolchain and Microsoft's C++ Build Tools be pre-installed on Windows, which is a big overhead! Skipping `[litellm]` saves you this headache.
 * **We're pinning our ADK to version 2.5.0.** ADK is a fast-evolving framework. Google will no doubt keep adding capabilities and deprecating others as the framework matures. By pinning the version, we ensure the code listings in this series keep working exactly as written, so nothing breaks on your end simply because the ADK version has moved on.  It also lets us verify and confirm that every piece of code we write behaves as expected against this specific version.
 * We'll be using Claude as our LLM of choice in all examples (actually in most examples - there will be a few exception where we are forced to use Gemini, which is native to the ADK). We will use ADK's native Anthropic provider, `google.adk.models.anthropic_llm`, which is built directly on Anthropic's official `anthropic` Python package. 
@@ -106,7 +106,7 @@ You will need two - one for our default Claude LLM and the other for the Gemini 
 
 Nothing in this series gets hardcoded into Python files. Two config files carry everything.
 
-Create `.env` in the project root (i.e. in the `adk2_tutorial` folder) - this is for all your API keys.
+Create `.env` file in the project root (i.e. in the `adk2_tutorial` folder) - this is for all your API keys.
 
 ```bash
 # .env
@@ -149,8 +149,7 @@ models:
 lesson_overrides: { }
 ```
 
-Keeping this in YAML rather than Python means you can change your entire series' model policy by editing one file, and
-it also gives you a single place to look if you want to change your provider.
+Keeping this in YAML rather than Python means you can change your entire series' model policy by editing one file, and it also gives you a single place to look if you want to change your provider.
 
 > 📌 **NOTE:** Our aim is to minimize the cost you incur when learning a new framework like the ADK. API access of leading model providers - OpenAI (GPT-models), Anthropic (Claude models) and Google (Gemini models) - is not free. 
 >
@@ -158,7 +157,7 @@ it also gives you a single place to look if you want to change your provider.
 
 ## Step 6: VS Code setup
 
-Create `.vscode/settings.json`:
+Create `.vscode/settings.json` in your project root folder (i.e. under `adk2_tutorial` folder).
 
 ```json
 {
@@ -178,18 +177,16 @@ On Windows, `uv` places the interpreter at `.venv\Scripts\python.exe` instead. V
 
 We're not building an agent yet, that's Lesson 2, but we should confirm the CLI is installed and that your Claude key actually works.
 
-Create `scripts/verify_setup.py`:
+Create `scripts/verify_setup.py` under the project root folder:
 
 ```python
 """Verifies the ADK environment is correctly configured.
 
-Checks three things, in order: the ADK CLI is installed, required
-environment variables are present, and the Anthropic API key can
-successfully reach Claude Haiku with a minimal request.
+Checks three things, in order: the ADK CLI is installed, required environment variables are present, and the Anthropic API key can successfully reach Claude Haiku with a minimal request.
 
-This script calls the Anthropic SDK directly, which mirrors exactly
-what ADK's native Claude provider (google.adk.models.anthropic_llm)
-does under the hood, so a pass here means Lesson 2's agent will work.
+This script calls the Anthropic SDK directly, which mirrors exactly what ADK's native Claude provider (google.adk.models.anthropic_llm)
+does under the hood, so a pass here means Lesson 2's agent will work.  
+
 It intentionally avoids importing google.adk.agents, since building
 an actual Agent is the subject of Lesson 2.
 """
@@ -259,7 +256,8 @@ def check_claude_connectivity() -> bool:
         reply = response.content[0].text.strip()
         print(f"[OK] Claude Haiku responded: '{reply}'")
         return True
-    except Exception as error:  # noqa: BLE001 — surfacing any provider error is the point here
+    except Exception as error:  
+        # flag any API error as a failure
         print(f"[FAIL] Could not reach Claude: {error}")
         return False
 
@@ -285,7 +283,7 @@ if __name__ == "__main__":
     main()
 ```
 
-Run it:
+**Run it**: from the terminal window, run the following command from the project root (`adk2_tutorial`) folder:
 
 ```bash
 uv run scripts/verify_setup.py
