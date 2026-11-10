@@ -315,6 +315,6 @@ Things to try:
 
 ## Conclusion
 
-In this lesson, we learnt how to build and test our very first agent, which could answer general questions on Retail banking terminology. We also saw how we could easily _swap_ the LLM used by the Agent and how to vary the _hyper-parameters_ that determine Agent behavior. For brevity, we won't be using the `ypes.GenerateContentConfig(...)` in the coming lessons, but it's important to note that it's the mechanism you'd use in Production to _tweak_ agent behavior. You **should use it** in Production!
+In this lesson, we learnt how to build and test our very first agent, which could answer general questions on Retail banking terminology. We also saw how we could easily _swap_ the LLM used by the Agent and how to vary the _hyper-parameters_ that determine Agent behavior. For brevity, we won't be using the `tpes.GenerateContentConfig(...)` in the coming lessons, but it's important to note that it's the mechanism you'd use in Production to _tweak_ agent behavior. You **should use it** in Production!
 
 In the next lesson, our agent will start doing some real work, like calculating loan EMIs and affordability for retail lending use case. 
