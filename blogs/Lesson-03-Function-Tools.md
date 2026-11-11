@@ -1,6 +1,6 @@
 # Lesson 3: Function Tools
 
-Lesson 2 got a bare-bones agent talking to Claude and Gemini. It could explain what an EMI is, but it couldn't actually calculate one for a real customer. That's the gap we're closing in this lesson: giving an agent real Python functions it can call to do actual work, not just talk about it.
+Lesson 2 got a bare-bones agent talking to Claude and Gemini. It could explain what an generic banking terms, such as APR/EMI etc. are, but it couldn't actually calculate one for a real customer. That's the gap we're closing in this lesson: giving an agent real Python functions it can call to do actual work, not just talk about it.
 
 ![Using Function Tools](images/using_function_tools.png)
 
@@ -254,7 +254,7 @@ $$P = \frac{E \cdot \left[(1 + r)^n - 1\right]}{r \cdot (1 + r)^n} = \frac{10000
 >
 > There is also a _technical reason_: The underlying **function-calling spec** that Gemini, Claude, and most providers share **requires a tool's result to reach the model as a dict-shaped payload**. ADK enforces this at the framework level: if a tool returns anything other than a `dict` shaped result, for example a plain string, a number, a list, then ADK will automatically wrap it into `{"result": <value>}` dict before sending it back, so returning a non-dict wouldn't actually break anything.
 >
-> Returning a dict yourself is what gives you control over that shape instead of accepting the generic, unlabeled `result` wrapper. It's also what makes error handling legible to ADK itself: `FunctionTool` includes a built-in telemetry hook that checks specifically for a dict containing an `error` key to detect and log tool failures. The `found` / `error` pattern used here isn't just readable to the model, it's a shape ADK's own internals are already built to recognize.
+> Returning a dict yourself is what gives you control over that shape instead of accepting the generic, unlabeled `result` wrapper. It's also what makes error handling legible to ADK itself: `FunctionTool` includes a built-in telemetry hook that checks specifically for a dict containing an `error` key to detect and log tool failures.
 
 Create `agents/lesson03_function_tools/agent.py`:
 
@@ -337,7 +337,7 @@ Run the following command from the project root (`adk2_tutorial`) from a new ter
 ```bash
 # to ensure local environment is active run this command
 source .venv/bin/activate # or .venv\Scripts\activate on Windows
-# run this command for "console" interface to agent
+# run the agent with this command
 PYTHONWARNINGS=ignore uv run adk run agents/lesson03_function_tools
 ```
 > **NOTE:** I have added the `PYTHONWARNINGS=ignore` leader to the actual `uv` command to suppress the log messages as discussed in previous lesson.
@@ -348,7 +348,35 @@ Try a question that needs the EMI calculator:
 What would my monthly payment be on a 1,000,000 loan at 8.5% interest for 20 years?
 ```
 
-You should see the agent recognize this needs a calculation, silently call `calculate_emi` behind the scenes (in `adk run`'s CLI you'll typically see a note that a tool was called, followed by the model's answer), and come back with a clear statement of the monthly EMI, total interest, and total repayment, phrased in plain language rather than as raw numbers.
+You should see the agent recognize this needs a calculation, silently call `calculate_emi` behind the scenes (in `adk run`'s CLI you'll typically see a note that a tool was called, followed by the model's answer), and come back with a clear statement of the monthly EMI, total interest, and total repayment, phrased in plain language rather than as raw numbers. **You won't see these details if you used the PYTHONWARNINGS=ignore leader (as that suppresses all log messages from ADK!)**.
+
+My output looks something like this:
+
+```
+[user]: What would my monthly payment be on a 1,000,000 loan at 8.5% interest for 20 years?
+[loan_calculator_agent]: On a loan of **1,000,000** at **8.5% annual interest** for **20 years (240 months)**, here are the key figures:
+
+- **Monthly EMI: 8,678.23**
+- **Total Interest Paid: 1,082,775.76**
+- **Total Amount Payable: 2,082,775.76**
+
+This means you'll pay approximately **8,678** each month for 20 years, and over the life of the loan, you'll pay about **1.08 million** in total interest.
+```
+
+The Claude Haiku model is intelligent enough to figure out Indian currency notations. For example, see the following interaction:
+
+```
+[user]: What would my monthly payment be on a 10 lakhs loan at 8.5% interest for 20 years?                                                 
+[loan_calculator_agent]: On a loan of **10 lakhs (10,00,000)** at **8.5% annual interest** for **20 years (240 months)**, here are the key figures:
+
+- **Monthly EMI: 8,678.23**
+- **Total Interest Paid: 10,82,775.76**
+- **Total Amount Payable: 20,82,775.76**
+
+This means you'll pay approximately **8,678** each month for 20 years, and over the life of the loan, you'll pay about **10.83 lakhs** in total interest.
+```
+
+Same amount (10 lakhs == 1,000,000), but Claude returns numbers with Indian number notation. Cool!
 
 Now try one that needs affordability, in the same session:
 
@@ -356,18 +384,14 @@ Now try one that needs affordability, in the same session:
 I earn 150,000 a month and already pay 20,000 in EMIs. Could I afford that same loan?
 ```
 
-You should see it call `check_loan_affordability` this time, and answer with a clear yes-or-no plus the maximum loan or EMI it calculated, rather than trying to reuse the previous answer.
-
-Here is how it _may_ look for your (this is a screenshot of my Terminal on a Manjaro Linux KDE system)
-
-![Function Tools Console Run](images/function_tools_console_run.png)
+You should see it call `check_loan_affordability` this time, and answer with a clear yes-or-no plus the maximum loan or EMI it calculated, rather than trying to reuse the previous answer. **You won't see these details if you used the PYTHONWARNINGS=ignore leader (as that suppresses all log messages from ADK!)**.
 
 > [!Warning]
 > <small>**LLM OUTPUT IS PROBABALISTIC NOT DETERMINISTIC**</small>
 >
-> So don't expect to see the same output as mine. Also, don't expect to see the exact same response (except the numbers!) even if you ask the same question twice. This is just the way LLMs (any provider's LLMs) work.
+> So don't expect to see _exactly_ the same output as mine. The numbers should match, but format of output could vary (even if you use the same LLM as I have). This is just the way LLMs work (any LLM from any provider - Anthropic, OpenAI, Google, Meta...).
 
-For the web UI, run the following command from your terminal (or your IDE's terminal - I use VS Code). Make sure that the local environment is active.
+For the web UI, run the following commands in your terminal (or your IDE's terminal - I use VS Code) and from the project root folder (`adk2_tutorial`). Make sure that the local environment is active.
 
 ```bash
 # to ensure local environment is active run this command
@@ -376,24 +400,20 @@ source .venv/bin/activate # or .venv\Scripts\activate on Windows
 uv run adk web agents
 ```
 
-You should see a web url (usually http://127.0.0.1:8000) displayed in your terminal. Click on that URL to open the ask web interface - mine opens in VS Code (my preferred IDE), your's could open in your default browser. Click the downdown at the very top that reads "Select an app" and pick `lesson03_function_tools`, and ask the same two questions in the text box that reads `Type a message` at the bottom of the window. For example, the response to the first question `What would my monthly payment be on a 1,000,000 loan at 8.5% interest for 20 years?`, looks something like this in my IDE
+You should see a web url (usually http://127.0.0.1:8000) displayed in your terminal. Click on that URL to open the ask web interface - mine opens in VS Code (my preferred IDE), your's could open in your default browser. Click the dropdown at the very top that reads "Select an app" and pick `lesson03_function_tools`, and ask the same two questions in the text box that reads `Type a message` at the bottom of the window. For example, the response to the first question `What would my monthly payment be on a 1,000,000 loan at 8.5% interest for 20 years?`, looks something like this in my IDE
 
 ![ADK Web Session with Loan Tools](images/adk_web_ui_loan_tools.png)
 
 The web UI is worth using here specifically because it will visibly show you the tool call and its raw return value as a separate step in the conversation, before the model's final worded response, which is a good way to build intuition for what's actually happening between your question and the answer you see. 
 
-## If you're coming from LangChain or LangGraph
-
-If you've defined tools in LangChain before, this will feel familiar: LangChain also builds a tool's schema from a Python function's signature and docstring, typically via the `@tool` decorator or `StructuredTool`. The mechanics ADK uses under the hood are different (LangChain generally leans on Pydantic models for tool schemas, ADK builds directly from function signatures), but the developer experience, write a typed function with a good docstring, hand it to the agent, is close enough that this should feel like a small syntax change rather than a new concept.
-
 ## How this addressed the problem
 
-We started with a loan officer manually punching numbers into a spreadsheet for every EMI and affordability question. Now a customer can ask either question in plain language, and the agent produces a correct answer, backed by real arithmetic running in Python, not by the model guessing. The critical design choice was keeping the model out of the math entirely: it identifies intent and extracts numbers from a sentence, which is what LLMs are actually reliable at, and hands the arithmetic itself off to deterministic code, which is what LLMs are not reliable at.
+We started with a loan officer manually punching numbers into a spreadsheet for every EMI and affordability question. Now a customer can ask either question in plain language, and the agent produces a correct answer, backed by real arithmetic running in Python, not by the model guessing. The critical design choice was keeping the model out of the math entirely: the LLM identifies intent and extracts numbers from a sentence, which is what it's reliable for. It then hands off the arithmatic calculation to the respective tool - LLMs are not reliable for math calculations.
 
 Such an agent could also be intergrated into a chat application like we developed in Lesson 2 and the user could ask the bank's chat application these questions from her mobile or laptop without ever visiting the bank!
 
 ## Conclusion
 
-In this lesson we gave an agent its first real capability: the ability to use tools (calling Python functions instead of just generating text). The loan desk assistant now calculates real EMIs and checks real loan affordability using deterministic arithmetic, with the model's role limited to understanding the customer's question, extracting the right numbers, and calling the right tool, never doing the math itself. 
+In this lesson we gave an agent its first real capability: the ability to use tools (calling Python functions instead of just generating text). The loan desk assistant now calculates _real_ EMIs and checks _real loan affordability_ using _deterministic arithmetic_. The model's (LLM) role is limited to understanding the customer's question, extracting the right numbers, and calling the right tool(s), never doing the math itself. 
 
-In the next lesson we stay with tools, but shift to a different kind: built-in tools that ADK ships out of the box rather than ones you write yourself, including live web search grounding. We'll also run into a real limitation, ADK's built-in Google Search tool only works with Gemini models, we'll cover how we can overcome that with a custom search function that models other than Gemini can use.
+In the next lesson we will continue to stay with tools, but our focus will shift to a different _kind_ of tools. The ADK ships with several _built-in tools_ that you don't code yourself, such as live web search tools (powered by Google search). We'll see how easy it is to integrate such tools into an ADK Agent and also cover the limitations & alternatives.
