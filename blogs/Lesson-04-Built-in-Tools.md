@@ -1,17 +1,16 @@
 # Lesson 4: Built-in Tools
 
-Lesson 3 gave an agent function tools you wrote yourself. This lesson introduces a different category: **tools that ADK ships built in**, where the model calls out to a capability Google runs on its own infrastructure rather than code sitting in your project. We'll build an agent with one directly - `google_search`, hit a real, current limitation along the way, and then build a genuine, working alternative for Claude, which should also work for other non-Gemini models (like Llama, or OpenAI or another other model you prefer)
+Lesson 3 gave an agent function tools you wrote yourself. This lesson introduces a different category: **tools that ADK ships built in**, where the model calls out to a capability Google runs on its own infrastructure rather than code sitting in your project. We'll build an agent with one such tool - `google_search`, hit a real, current limitation along the way, and then build a genuine working alternative for Claude (our preferred LLM).
 
 ## The problem we're solving
 
-A wealth management desk's investment research team gets asked two kinds of questions constantly: `"What's Reliance Industries trading at right now?"` and `"Why did Tesla's stock move today?"` The first is a data lookup, exactly the kind of thing Lesson 3's function tools handle well. The second request would need a slightly different approach - get the latest information from the web about Tesla to the LLM and let it figure out why Tesla's stock moved today, because it could very well be related to some _market event_. That's exactly what Google's search excels
-at, and what we are going to leverage for the 2nd kind of request.
+A wealth management desk's investment research team gets asked two kinds of questions constantly: `"What's <Reliance Industries> trading at right now?"` (replace <Reliance Industries> with any other company name!) and `"Why did <Tesla's> stock move today?"` (same with <Tesla> here). The first is a data lookup, exactly the kind of thing Lesson 3's function tools are built to handle. The second request would need a slightly different approach - get the latest information from the web about Tesla to the LLM and let it figure out why Tesla's stock moved today. That's exactly what Google's search excels at, and what we are going to leverage for the 2nd kind of request.
 
 ![Using Built-in Tools](images/Using%20Built-in%20Tools.png)
 
-We're going to build a market briefing agent that handles both: live prices via a function tool, and current news via web search. For live stock prices we'll use the `yfinance` library and we'll use an internal tool `google_search` for web searching.
+We're going to build a market briefing agent that handles both: live prices via a function tool (our custom built tool), and current news via web search (a built-in ADK tool). For live stock prices we'll use the `yfinance` library and we'll use an internal tool `google_search` for web searching.
 
-Add the dependency, by running the following commands on a terminal from the project root folder.
+Add the dependency, by running the following commands on a terminal from the project root folder (`adk2_tutorial`).
 
 ```bash
 # activate your local environment
@@ -20,13 +19,18 @@ source .venv/bin/activate
 uv add yfinance
 ```
 
-`yfinance` pulls market data from Yahoo Finance for free, no API key required, and works for US, Indian (NSE/BSE), and European tickers alike. No additional dependencies required for `google_search` as it's a tool built into the ADK by Google.
+`yfinance` pulls market data from Yahoo Finance for free, no API key required, and works for US, Indian (NSE/BSE), and European tickers alike. We don't need to install any libraries for using `google_search` as that tool is built-into the ADK by Google.
 
-We'll create a `get_stock_price` finance tool, which looks up the current live price given a ticker (which is another word for stock symbol). The `yfinance` library uses tickers like `RELIANCE.NS` (for Reliance Industries), `MSFT` (for Microsoft) and so on. Search for the ticker on [Yahoo! Finance](https://finance.yahoo.com/) - for example, if I search for `Tesla` I will see something like this, which tells me that Tesla's ticker is `TSLA`. Indian stocks traded on NSE have tickers ending in `.NS`.
+We'll create a `get_stock_price` finance tool, which looks up the current live price given a ticker (which is another word for stock symbol). The `yfinance` library uses tickers like `RELIANCE.NS` (for Reliance Industries), `MSFT` (for Microsoft) and so on. 
+
+> [!Tip]
+> **How do I know which ticker (stock symbol) to use?**
+>
+> Search for the ticker on [Yahoo! Finance's website](https://finance.yahoo.com/). For example, if I type in `Tesla` in the search box, I could see something like this - it tells me that Tesla's ticker is `TSLA`. Indian stocks traded on NSE have tickers ending in `.NS` (search for Reliance or Bajaj or HDFC for example)
 
 ![Tesla Ticker](images/tesla_on_yfinance.png)
 
-This tool is very generic and could be useful in other agents too. So, instead of creating it in a _local `tools.py` file, as we did in the previous lesson, we'll create this tool in the `agents/common/finance_tools.py`, which is a file common to all our agents.
+The `get_stock_price` tool is very generic and could be useful in other agents too. So, instead of creating it in a _local_ `tools.py` file, as we did in the previous lesson, we'll create this tool in the `agents/common/finance_tools.py`, which is a file common to all our agents.
 
 Create `agents/common/finance_tools.py`:
 
@@ -99,9 +103,9 @@ def get_stock_price(ticker: str) -> dict:
         return {"found": False, "ticker": ticker, "error": str(error)}
 ```
 
-This returns a dict with a `found` flag and either the data or an error message, rather than letting an exception escape. That matters specifically for tool functions: if this raised an uncaught exception on a bad ticker, the whole agent turn would fail. Returning a structured "not found" result instead lets the model see what went wrong and respond sensibly, for example by asking the customer to double check the ticker symbol.
+This returns a dict with a `found` flag and either the data or an error message, rather than letting an exception escape. This is critical, especially for tool functions: if an exception goes uncaught, the whole agent turn would fail. Returning a structured "not found" result instead lets the model see what went wrong and respond sensibly, for example by asking the customer to double check the ticker symbol.
 
-The line `history = stock.history(period="5d")` returns a `pandas` DataFrame with 5 rows into the `history` variable. It looks something like this - the `Close` column returns the closing price as of date, which should make the rest of the code easy to understand.
+The line `history = stock.history(period="5d")` returns a `pandas` DataFrame with 5 rows into the `history` variable (it fetches ). It looks something like this - the `Close` column returns the closing price as of date, which should make the rest of the code easy to understand.
 
 ![yFinance DataFrame](images/yfinance_dataframe.png)
 
@@ -145,31 +149,31 @@ root_agent = Agent(
 )
 ```
 
-**Hey, where's my Claude model?** 🤨
-
-An astute reader will immediately notice that we are not using our Claude model with this agent - instead we now have `model="gemini-3.5-flash-latest"` appearing instead. This isn't a mistake. This is infact a fundamental limitation of ADK with internal tools. **Internal tools, such as Google Search, work only on Google's own model-serving infrastructure and cannot be used with non-Gemini models** 😦. If we use `model=get_model("primary")` as we have been doing so far, which points to a Claude model (specifically Claude Haiku), the agent will fail at runtime. We will address this limitation with a custom search function later in this lesson, but for now understand & note this limitation!
-
-> [!Warning]
->
-> ADK **does not support** non-Gemini models with internal tools such as Google Search!
-
 Create `agents/lesson04_built_in_tools/__init__.py`:
 
 ```python
 from . import agent
 ```
 
+> **Hey, where's my Claude model?** 🤨
+>
+> An astute reader will immediately notice that we are not using our Claude model with this agent - we now have `model="gemini-3.5-flash-latest"` appearing instead. This isn't a mistake. This is infact a fundamental limitation of ADK with internal tools. **Internal tools, such as Google Search, work only on Google's own model-serving infrastructure and cannot be used with non-Gemini models** 😦. If we use `model=get_model("primary")`, which points to a Claude model (specifically Claude Haiku), the agent will fail at runtime. We will address this limitation with a custom search function later in this lesson, but for now understand & note this limitation!
+
+> [!Warning]
+>
+> ADK **does not support** non-Gemini models with internal tools such as Google Search!
+
 > [!Note]
 >
-> One detail here needs some explanation: you may have seen older ADK examples that show search grounding as simply `tools=[google_search]`. That pattern isn't wrong, it's just dated: prior to ADK Python release 1.16 (October 2025), `google_search` genuinely could not be combined with _any other tool_ in the same agent, only one built-in tool, by itself, per agent, so `tools=[google_search]` alone was the only supported shape 😮!
+> One detail here needs some explanation: you may have seen older ADK examples that show search grounding with Google search as simply `tools=[google_search]`. That pattern isn't wrong, it's just dated. Prior to ADK for Python release 1.16, this was the only way of specifying the tool. It also came with a significant limitation - you could not combined it with _any other tool_ in the same agent 😮!
 >
-> `google_search` itself is a ready-made, pre-built instance of the search tool that ADK exports directly, and it's still the simplest way to add search grounding when it's the *only* tool an agent needs. Here, we're also giving the agent our custom `get_stock_price` tool, and that's exactly where using just a plain `google_search` singleton will fail catastropically 😟!
+> `google_search` is a ready-made, pre-built instance of the search tool that ADK exports, and it's still the simplest way to add search grounding when it's the *only* tool an agent needs. Here, we're also giving the agent our custom `get_stock_price` tool, and that's where using `google_search` becomes a strict no-no!
 >
-> And that's what the `GoogleSearchTool(bypass_multi_tools_limit=True)` is for 😀. While using this constructs helps us combine Google Search with other function tools, it still requires a Google only LLM (i.e. only Gemini models). **Note that this mechanism has been available since ADK 1.16 release** 😎!
+> And that's what the `GoogleSearchTool(bypass_multi_tools_limit=True)` is for 😀 - this mechanism is available from ADK 1.1.6. Using this constructs helps us combine Google Search with other function tools as well. However it _still_ works with just Gemini models from Google. 
 >
-> That raises a fair question: _"if the fix is one keyword argument, why isn't it just the default behavior of `google_search` itself?"_ Because it isn't actually free. Under the hood, setting the flag causes ADK to run the search as an isolated sub-agent call rather than a true inline model built-in: a separate, hidden model invocation handles the search and hands the result back to the main agent. That hidden sub-agent call is a genuine extra model invocation, with its own latency and its own token cost, every single time search fires. If Google had made this the default, every existing single-tool search agent out there would have silently started making an extra hidden model call per search, with no code change and no warning, changing everyone's cost and latency profile overnight. You should, in fact, thank Google for this 😊.
+> That raises a fair question: _"if the single-tool-fix is so simple, why isn't it the default behavior of `google_search` itself?"_ Because it isn't actually free. Under the hood, setting the flag causes ADK to run the search as an isolated sub-agent call rather than a true inline model built-in: a separate, hidden model invocation handles the search and hands the result back to the main agent. That hidden sub-agent call is an extra model invocation (== 💲), with its own latency and its own token cost, every single time search fires. If Google had made this the default, every existing single-tool search agent out there would have silently started making an extra hidden model call per search, with no code change and no warning, changing everyone's cost and latency profile overnight. You should, in fact, thank Google for this 😊.
 >
-> **The rule of thumb going forward:** reach for the plain `google_search` singleton when search grounding is the _only tool_ on an agent, and switch to `GoogleSearchTool(bypass_multi_tools_limit=True)` explicitly (knowing you'll incur more token costs!) the moment you need to combine it with anything else, exactly like we're doing here. 
+> **The rule of thumb going forward:** use the plain `google_search` singleton when search grounding is the _only tool_ on an agent, and switch to `GoogleSearchTool(bypass_multi_tools_limit=True)` explicitly (knowing you'll incur more token costs!) the moment you need to combine it with anything else, exactly like we're doing here. 
 
 Ok, enough of _gyan_. Let's run our agent! 
 
@@ -179,7 +183,7 @@ In a new terminal, type in the following command(s) from the project root (`adk2
 # activate the local env first!
 source .venv/bin/activate 
 # run the agent
-PYTHONWARNINGS=ignore uv run adk run agents/lesson04_built_in_tools
+uv run adk run agents/lesson04_built_in_tools
 ```
 
 Ask about a price:
@@ -187,7 +191,6 @@ Ask about a price:
 ```
 What's Reliance Industries trading at? Ticker is RELIANCE.NS
 ```
-
 
 > [!Warning]
 >
@@ -217,15 +220,15 @@ Select `lesson04_built_in_tools` and try the same two questions there.
 
 You just used two different kinds of tool in the same agent, `get_stock_price` and `GoogleSearchTool`, and they work in fundamentally different ways.
 
-A function tool, like `get_stock_price`, is code you write and ADK exposes to the model. A built-in tool is different: it's a capability Google runs internally, on their own servers, as part of generating a response. When you give Gemini the `google_search` built-in tool, Gemini itself performs the search as part of its inference process and folds the results into its answer, you never see a separate "search API call" happening in your code the way you do with a function tool, which is exactly what you just observed: a visible tool call for the price, and no equivalent visible call for the news.
+A function tool, like `get_stock_price`, is code you write and ADK exposes to the model. Coversely, a built-in tool is a capability Google runs internally, on their own servers, as part of generating a response. When you give a Gemini LLM the `google_search` built-in tool, Gemini itself performs the search as part of its inference process and folds the results into its answer, you never see a separate "search API call" happening in your code the way you do with a function tool.
 
-This is also why the agent you just built had to use Gemini models only. Built-in tools are wired into a particular model provider's infrastructure, they're not portable code you can hand to any model. `google_search` is Gemini-only because it depends on machinery inside Google's model-serving stack that simply doesn't exist for Claude. Replacing the `model="gemini-3.5-flash-lite"` line with `model=AnthropicLlm("claude-haiku-4-5-20251001")` in the code above **will not work!**. Try it & see for yourself.
-
-That failure is the actual problem for us: Claude is our preferred model, and a Gemini-exclusive tool means Claude-based agents are locked out of grounded, current information unless we build an equivalent tool ourselves. Function tools have no such _"gemini-models-only"_ restriction, since they're just Python functions ADK calls on your behalf. This is exactly why a custom search function tool is a real, working substitute here. That's what we're building next.
+This is also why the agent you just built had to use Gemini models only. Built-in tools are wired into Google's infrastructure, they're not portable code you can hand to a non-Gemini model. So, `google_search` is Gemini-only tool because it depends on machinery inside Google's model-serving stack that is simply not available to Claude (or OpenAI or any other non-Gemini model). 
 
 ## Step 2: Build a custom search tool and a Claude-based agent
 
-This time we're reaching for Tavily, a search API purpose-built for AI agents. It returns clean, structured results (title, URL, content snippet, relevance score) instead of raw HTML to parse, and it has a search mode aimed specifically at finance-related queries, a good fit for a BFSI series. To use Tavily, you'll need an API key and you'll need to add the Tavily module to our local environment. The API key has quota restructions for free-usage, which are good enough when learning ADK concepts.
+The Gemini-only constraint cited above is a problem for us. Claude is our preferred model, and a Gemini-exclusive tool means Claude-based agents are locked out of grounded, current information unless we build an equivalent tool ourselves. Function tools have no such _"gemini-models-only"_ restriction, since they're just Python functions ADK calls on your behalf. This is exactly why a custom search function tool is a real, working substitute here. That's what we're building next.
+
+This time we'll use Tavily, a search API purpose-built for AI agents. It returns clean, structured results (title, URL, content snippet, relevance score) instead of raw HTML you'll have to parse. To use Tavily, you'll need an API key and you'll need to add the Tavily module to our local environment. The API key has quota restructions for free-usage, which are good enough when learning ADK concepts.
 
 **Get a free API key:**
 
@@ -243,7 +246,7 @@ TAVILY_API_KEY=your-tavily-key-here
 
 **Add the dependency**
 
-In a new terminal, run these commandsfrom the root folder (`adk2_tutorial`).
+In a new terminal, run these commands from the root folder (`adk2_tutorial`).
 
 ```bash
 # activate local Python environment
@@ -312,7 +315,7 @@ def get_stock_news(company_or_ticker: str, max_results: int = 5) -> dict:
         return {"found": False, "query": company_or_ticker, "error": str(error)}
 ```
 
-Now build the Claude-side agent. **NOTE** - this is created in a separate folder than the Google agent - don't create in same folder as the Google Search powered agent! 
+Now build the Claude-side agent. **NOTE** - this is created in a separate folder than the Google agent - don't create it in same folder as the Google Search powered agent! 
 
 Create `agents/lesson04_market_briefing/agent.py`:
 
@@ -367,7 +370,7 @@ Create `agents/lesson04_market_briefing/__init__.py`:
 from . import agent
 ```
 
-Structurally, there's nothing new in this file if you've done Lesson 3: two function tools, both imported from the shared `common` package. The instruction is worth reading closely, though. It tells the model explicitly to cite sources and include URLs for news, and to decline giving investment advice. Neither of those behaviors happens automatically. A model asked "why did this stock move" will happily generate a plausible-sounding explanation without a source unless told to ground its answer in what the tool actually returned, and a model asked "should I buy this stock" will often just answer unless it's told that's out of scope. In a BFSI context, both of these are the kind of thing that turns into a compliance problem if left to the model's default behavior.
+Structurally, there's nothing new in this file if you've done Lesson 3. We have two function tools, both imported from the shared `common` package. The instruction is worth reading closely, though. It tells the model explicitly to cite sources and include URLs for news, and to decline giving investment advice. Neither of those behaviors happens automatically. A model asked "why did this stock move" will happily generate a plausible-sounding explanation without a source unless told to ground its answer in what the tool actually returned, and a model asked "should I buy this stock" will often just answer unless it's told that's out of scope. In a BFSI context, both of these are the kind of thing that turns into a compliance problem if left to the model's default behavior.
 
 ## Step 3: Compare both agents on the same prompts
 
